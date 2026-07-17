@@ -42,13 +42,13 @@ function useTerminalSession(containerRef, relayClient) {
   useEffect(() => {
     if (!containerRef.current || !relayClient) return undefined;
 
-    // xterm.js renders to a <canvas>, and canvas 2D font/color strings
-    // don't resolve CSS custom properties the way stylesheet values do —
-    // passing 'var(--font-mono)'/'var(--color-surface)' directly silently
-    // falls back to xterm's own defaults (a plain sans-serif font and a
-    // white background), which is exactly the "white parts don't match"
-    // mismatch against the app's dark theme. Resolve the actual computed
-    // values once at mount instead.
+    // xterm's font/theme options don't resolve CSS custom properties the
+    // way stylesheet values do (confirmed: this build uses xterm's DOM
+    // renderer, not canvas, but the options object still wants concrete
+    // values, not var() strings) — passing 'var(--font-mono)' directly
+    // silently falls back to xterm's own defaults (plain sans-serif, white
+    // background), which was the original "white parts don't match" bug.
+    // Resolve the actual computed values once at mount instead.
     const styles = getComputedStyle(document.documentElement);
     const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
 
@@ -56,6 +56,11 @@ function useTerminalSession(containerRef, relayClient) {
       fontFamily: resolve('--font-mono', 'monospace'),
       fontSize: 12,
       convertEol: true,
+      // Selecting text (click-drag, or double-click a word) copies it to
+      // the system clipboard automatically — standard terminal-emulator
+      // UX, and the DOM renderer makes the rendered text genuinely
+      // selectable the same way any other page text is.
+      copyOnSelect: true,
       theme: {
         background: resolve('--color-neutral-900', '#1a1a1a'),
         foreground: resolve('--color-neutral-100', '#f0f0f0'),
