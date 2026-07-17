@@ -153,8 +153,15 @@ export default function TerminalScreen({ session, relayClient, onBack, onOpenEnc
             type="button"
             className="tag tag-outline"
             style={{
-              fontFamily: 'var(--font-mono)', flex: 'none', cursor: 'pointer', border: 0,
-              background: k.kind === 'modifier' && ctrlArmed ? 'var(--color-accent)' : undefined,
+              // .tag-outline was written for a <span> (transparent by
+              // default) — a native <button> has its own browser-default
+              // background (usually a light "buttonface" color) that the
+              // class never overrides, which combined with the dark
+              // theme's light --color-text produced white text on a
+              // white box. Explicit 'transparent' here is the fix.
+              fontFamily: 'var(--font-mono)', flex: 'none', cursor: 'pointer',
+              background: k.kind === 'modifier' && ctrlArmed ? 'var(--color-accent)' : 'transparent',
+              color: k.kind === 'modifier' && ctrlArmed ? 'var(--color-neutral-900)' : 'var(--color-text)',
             }}
             onClick={() => sendKey(k)}
           >
