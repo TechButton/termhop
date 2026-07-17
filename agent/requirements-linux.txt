@@ -1,0 +1,2 @@
+-r requirements.txt
+ptyprocess==0.7.*

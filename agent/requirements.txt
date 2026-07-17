@@ -1,0 +1,4 @@
+websockets==13.*
+pynacl==1.5.*
+cryptography==43.*
+pydantic==2.9.*

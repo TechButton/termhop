@@ -1,49 +1,46 @@
-# Placeholder — relay-server/ doesn't exist yet (see relay-server/README.md).
-# Referenced by DEPLOYMENT.md's "Docker Compose (recommended)" path.
-# Fill this in once relay-server/ has a Dockerfile and requirements.
-#
 # Two profiles:
 #   default — no memory limits, for a normal-sized box.
 #   beta    — explicit memory ceilings sized for the ~1.25GB beta relay
 #             box (see ops/beta-tier.md). Run with:
 #               docker compose --profile beta up -d
-#
-# services:
-#   relay:
-#     build: ./relay-server
-#     ports:
-#       - "8080:8080"
-#     environment:
-#       - DOMAIN=${DOMAIN}
-#       - REDIS_URL=${REDIS_URL}
-#       - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
-#     depends_on:
-#       - redis
-#     restart: unless-stopped
-#
-#   relay-beta:
-#     extends: relay
-#     profiles: ["beta"]
-#     mem_limit: 300m       # relay process itself is small — this is generous headroom
-#     mem_reservation: 150m
-#
-#   redis:
-#     image: redis:7-alpine
-#     volumes:
-#       - redis-data:/data
-#     restart: unless-stopped
-#
-#   redis-beta:
-#     extends: redis
-#     profiles: ["beta"]
-#     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
-#     mem_limit: 160m
-#     mem_reservation: 96m
-#
-# volumes:
-#   redis-data:
-#
-# NOTE: this is still a placeholder until relay-server/ has a real
-# Dockerfile — the `extends`/`profiles` structure above is the intended
-# shape, fill in real service definitions once the relay exists rather
-# than treating this file as final.
+
+services:
+  relay:
+    build: ./relay-server
+    ports:
+      - "${RELAY_PORT:-8080}:8080"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - REDIS_URL=${REDIS_URL}
+      - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  relay-beta:
+    extends: relay
+    profiles: ["beta"]
+    mem_limit: 300m       # relay process itself is small — this is generous headroom
+    mem_reservation: 150m
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis-beta:
+    extends: redis
+    profiles: ["beta"]
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    mem_limit: 160m
+    mem_reservation: 96m
+
+volumes:
+  redis-data:

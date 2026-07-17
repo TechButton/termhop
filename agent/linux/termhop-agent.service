@@ -1,0 +1,13 @@
+[Unit]
+Description=termhop remote-terminal agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=__EXEC_PATH__ pair
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

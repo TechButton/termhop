@@ -66,7 +66,15 @@ termhop-agent pair --relay wss://relay.yourdomain.com
 ```
 
 Installs as a systemd user service (`~/.config/systemd/user/termhop-agent.service`)
-so it survives reboots without running as root.
+so it survives reboots without running as root. After pairing once (so a
+relay URL is persisted), enable it and enable linger — **a systemd *user*
+unit does not run at boot without an active login session unless linger is
+enabled for that user**, which is easy to miss:
+
+```bash
+systemctl --user enable --now termhop-agent
+loginctl enable-linger $USER
+```
 
 ### macOS
 
