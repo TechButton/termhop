@@ -5,6 +5,7 @@
 // RelayClient established during pairing (see PairingScreen.jsx).
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
 import { BackIcon, DotsIcon, LockIcon, ChevronDownIcon } from '../icons';
 
 const COMPACT_KEYS = [
@@ -32,8 +33,39 @@ function useTerminalSession(containerRef, relayClient) {
   useEffect(() => {
     if (!containerRef.current || !relayClient) return undefined;
 
-    const term = new Terminal({ fontFamily: 'var(--font-mono)', fontSize: 12, convertEol: true });
+    // xterm.js renders to a <canvas>, and canvas 2D font/color strings
+    // don't resolve CSS custom properties the way stylesheet values do —
+    // passing 'var(--font-mono)'/'var(--color-surface)' directly silently
+    // falls back to xterm's own defaults (a plain sans-serif font and a
+    // white background), which is exactly the "white parts don't match"
+    // mismatch against the app's dark theme. Resolve the actual computed
+    // values once at mount instead.
+    const styles = getComputedStyle(document.documentElement);
+    const resolve = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+
+    const term = new Terminal({
+      fontFamily: resolve('--font-mono', 'monospace'),
+      fontSize: 12,
+      convertEol: true,
+      theme: {
+        background: resolve('--color-neutral-900', '#1a1a1a'),
+        foreground: resolve('--color-neutral-100', '#f0f0f0'),
+        cursor: resolve('--color-accent', '#cc6a2e'),
+        selectionBackground: resolve('--color-accent-300', '#7a4a2a'),
+      },
+    });
+    // xterm.js otherwise renders at a fixed default size (80x24 cells)
+    // regardless of its container's actual size — the FitAddon is what
+    // makes the canvas actually fill containerRef, instead of leaving the
+    // container's own (unstyled) background showing around a
+    // fixed-size terminal.
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
     term.open(containerRef.current);
+    fitAddon.fit();
+
+    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+    resizeObserver.observe(containerRef.current);
 
     relayClient.beginStreaming({
       onEncrypted: (plaintext) => term.write(new TextDecoder().decode(plaintext)),
@@ -46,6 +78,7 @@ function useTerminalSession(containerRef, relayClient) {
     });
 
     return () => {
+      resizeObserver.disconnect();
       inputListener.dispose();
       term.dispose();
       // Deliberately NOT closing relayClient here — closing the one shared
@@ -98,7 +131,11 @@ export default function TerminalScreen({ session, relayClient, onBack, onOpenEnc
       {/* xterm.js mounts here */}
       <div
         ref={containerRef}
-        style={{ flex: 1, overflow: 'auto', padding: relayClient ? 0 : '12px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6 }}
+        style={{
+          flex: 1, overflow: 'auto', padding: relayClient ? 0 : '12px 14px',
+          fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6,
+          background: relayClient ? 'var(--color-neutral-900)' : undefined,
+        }}
       >
         {!relayClient && <TerminalPlaceholderContent />}
         {!relayClient && (

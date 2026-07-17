@@ -44,8 +44,19 @@ export default function App() {
     setScreen('terminal');
   }
 
+  // .theme-dark only overrides CSS custom properties for itself and its
+  // descendants — it doesn't paint a background on its own, so without
+  // this explicit background it was relying on <body>'s background, which
+  // (body being an ANCESTOR of this div, not a descendant) still resolved
+  // to the light theme's near-white --color-bg default. Any gap not
+  // covered by content (e.g. xterm.js's canvas before it was sized to
+  // fill its container) showed that light color through, clashing with
+  // the rest of the dark UI.
   return (
-    <div className="theme-dark" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div
+      className="theme-dark"
+      style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)', color: 'var(--color-text)' }}
+    >
       {screen === 'pairing' && (
         <PairingScreen agentHostname="workstation-01" onPaired={handlePaired} />
       )}
