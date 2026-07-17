@@ -59,7 +59,7 @@ cd termhop/relay-server
 docker compose up -d
 
 # 2. Install the agent on the machine you want to control
-curl -fsSL https://raw.githubusercontent.com/<you>/termhop/main/agent/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/<you>/termhop/main/agent/linux/install.sh | sh
 termhop-agent pair --relay wss://your-relay.example.com
 
 # 3. Scan the QR code with the phone client, or open the web client and paste the pairing link

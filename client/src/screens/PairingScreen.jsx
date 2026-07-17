@@ -1,27 +1,50 @@
 // termhop client — Screen 1: Pairing
 import React, { useState } from 'react';
+import { RelayClient, HandshakeError } from '../lib/relayClient';
+import { decodePairingLink, PairingLinkError } from '../lib/pairingLink';
 
 export default function PairingScreen({ agentHostname, onPaired }) {
   const [tab, setTab] = useState('qr'); // 'qr' | 'link'
   const [link, setLink] = useState('');
   // status: idle -> connecting -> handshaking -> paired | failed
   const [status, setStatus] = useState('idle');
+  const [failureReason, setFailureReason] = useState('');
+  const [hostname, setHostname] = useState(agentHostname);
 
-  function startPair() {
+  async function startPair() {
+    let parsed;
+    try {
+      parsed = decodePairingLink(link);
+    } catch (err) {
+      setFailureReason(err instanceof PairingLinkError ? err.message : 'invalid pairing link');
+      setStatus('failed');
+      return;
+    }
+    if (parsed.hostname) setHostname(parsed.hostname);
+
+    const client = new RelayClient(parsed.relayUrl);
     setStatus('connecting');
-    // Real implementation: open wss:// to relay, present pairing token /
-    // QR payload, then perform the ECDH handshake per PROTOCOL.md.
-    // Timings below are placeholders standing in for that async flow.
-    setTimeout(() => setStatus('handshaking'), 700);
-    setTimeout(() => setStatus('paired'), 1500);
-    setTimeout(() => onPaired?.(), 2300);
+    try {
+      await client.connect();
+      setStatus('handshaking');
+      await client.sendPairRequest(parsed.token);
+      const { sessionId, agentHostname: challengeHostname } = await client.awaitPairChallengeAndDeriveKey();
+      if (challengeHostname) setHostname(challengeHostname);
+      client.sendPairComplete();
+      setStatus('paired');
+      onPaired?.({ client, sessionId, agentHostname: challengeHostname || parsed.hostname });
+    } catch (err) {
+      setFailureReason(err instanceof HandshakeError ? err.message : 'connection failed');
+      setStatus('failed');
+      client.close();
+    }
   }
 
   return (
     <div className="screen" style={{ padding: '20px 18px', gap: 16 }}>
       <h3>Pair with an agent</h3>
       <p style={{ margin: 0, fontSize: 12, opacity: .65 }}>
-        This device will be able to run commands on <strong>{agentHostname}</strong>. No silent trust
+        This device will be able to run commands on <strong>{hostname}</strong>. No silent trust
         grants — you'll confirm every pairing.
       </p>
 
@@ -35,7 +58,9 @@ export default function PairingScreen({ agentHostname, onPaired }) {
           position: 'relative', width: '100%', aspectRatio: '1', background: 'var(--color-surface)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <span style={{ fontSize: 11, opacity: .5, letterSpacing: '.05em', textTransform: 'uppercase' }}>viewfinder</span>
+          <span style={{ fontSize: 11, opacity: .5, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+            camera QR scanning not yet implemented — use "Paste link"
+          </span>
           {['top:14px;left:14px;border-top:3px solid var(--color-accent);border-left:3px solid var(--color-accent)',
             'top:14px;right:14px;border-top:3px solid var(--color-accent);border-right:3px solid var(--color-accent)',
             'bottom:14px;left:14px;border-bottom:3px solid var(--color-accent);border-left:3px solid var(--color-accent)',
@@ -50,9 +75,26 @@ export default function PairingScreen({ agentHostname, onPaired }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="field">
             <label>Pairing link</label>
-            <input className="input" placeholder="termhop://pair/…" value={link} onChange={(e) => setLink(e.target.value)} />
+            <input
+              className="input"
+              placeholder="termhop://pair?relay=…&token=…"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
           </div>
-          <button className="btn btn-secondary btn-block">Paste from clipboard</button>
+          <button
+            className="btn btn-secondary btn-block"
+            onClick={async () => {
+              try {
+                const text = await navigator.clipboard.readText();
+                setLink(text);
+              } catch {
+                /* clipboard access denied/unavailable — user can paste manually */
+              }
+            }}
+          >
+            Paste from clipboard
+          </button>
         </div>
       )}
 
@@ -61,7 +103,7 @@ export default function PairingScreen({ agentHostname, onPaired }) {
         {status === 'connecting' && <span>Connecting…</span>}
         {status === 'handshaking' && <span>Handshaking… (ECDH)</span>}
         {status === 'paired' && <span style={{ color: 'var(--color-accent)' }}>Paired ✓</span>}
-        {status === 'failed' && <span style={{ color: 'var(--color-accent)' }}>Failed — token expired</span>}
+        {status === 'failed' && <span style={{ color: 'var(--color-accent)' }}>Failed — {failureReason || 'unknown error'}</span>}
       </div>
 
       <div style={{ flex: 1 }} />
@@ -70,7 +112,9 @@ export default function PairingScreen({ agentHostname, onPaired }) {
         <button className="btn btn-primary btn-block" onClick={() => setStatus('idle')}>Try again</button>
       )}
       {status === 'idle' && (
-        <button className="btn btn-primary btn-block" onClick={startPair}>Pair device</button>
+        <button className="btn btn-primary btn-block" onClick={startPair} disabled={tab === 'link' && !link}>
+          Pair device
+        </button>
       )}
     </div>
   );

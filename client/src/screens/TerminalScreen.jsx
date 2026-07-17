@@ -1,34 +1,85 @@
 // termhop client — Screen 4: Terminal (compact-sheet variant, the chosen default)
 //
-// Real terminal rendering is xterm.js, mounted into `termRef`. This
-// component owns the chrome (header, permission sheet, key row, input);
-// wire xterm.js + the PROTOCOL.md pty_data/pty_input messages into
-// useTerminalSession() (stubbed below) to make it live.
+// Real terminal rendering is xterm.js, mounted into `containerRef` by
+// useTerminalSession(), which pumps encrypted pty_data/pty_input over the
+// RelayClient established during pairing (see PairingScreen.jsx).
 import React, { useEffect, useRef, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
 import { BackIcon, DotsIcon, LockIcon, ChevronDownIcon } from '../icons';
 
-const COMPACT_KEYS = ['Ctrl', 'Esc', 'Tab', 'Home', 'End', 'PgUp', 'PgDn', '←', '↑', '↓', '→', '^C', '^D', '^Z'];
+const COMPACT_KEYS = [
+  { label: 'Ctrl', kind: 'modifier' },
+  { label: 'Esc', bytes: '\x1b' },
+  { label: 'Tab', bytes: '\t' },
+  { label: 'Home', bytes: '\x1b[H' },
+  { label: 'End', bytes: '\x1b[F' },
+  { label: 'PgUp', bytes: '\x1b[5~' },
+  { label: 'PgDn', bytes: '\x1b[6~' },
+  { label: '←', bytes: '\x1b[D' },
+  { label: '↑', bytes: '\x1b[A' },
+  { label: '↓', bytes: '\x1b[B' },
+  { label: '→', bytes: '\x1b[C' },
+  { label: '^C', bytes: '\x03' },
+  { label: '^D', bytes: '\x04' },
+  { label: '^Z', bytes: '\x1a' },
+];
 
-// Stand-in for the real hook that opens the encrypted WebSocket session,
-// mounts xterm.js into `containerRef`, and streams pty_data/pty_input.
-function useTerminalSession(containerRef, sessionId) {
+// Mounts a real xterm.js Terminal and pumps it over the RelayClient that
+// PairingScreen already connected and paired — this must be the SAME
+// connection, not a new one (the relay ties a session to one live
+// WebSocket; reconnecting means re-pairing from scratch, not resuming).
+function useTerminalSession(containerRef, relayClient) {
   useEffect(() => {
-    // Real implementation:
-    //   const term = new Terminal({ fontFamily: 'var(--font-mono)', ... });
-    //   term.open(containerRef.current);
-    //   const ws = openEncryptedSession(sessionId);
-    //   ws.onDecrypted(pty_data => term.write(pty_data));
-    //   term.onData(input => ws.sendEncrypted({ type: 'pty_input', payload: input }));
-    //   return () => { term.dispose(); ws.close(); };
-  }, [sessionId]);
+    if (!containerRef.current || !relayClient) return undefined;
+
+    const term = new Terminal({ fontFamily: 'var(--font-mono)', fontSize: 12, convertEol: true });
+    term.open(containerRef.current);
+
+    relayClient.beginStreaming({
+      onEncrypted: (plaintext) => term.write(new TextDecoder().decode(plaintext)),
+      onSessionClose: () => term.write('\r\n\x1b[2m[session closed]\x1b[0m\r\n'),
+      onError: (payload) => term.write(`\r\n\x1b[2m[relay error: ${payload?.message ?? 'unknown'}]\x1b[0m\r\n`),
+    });
+
+    const inputListener = term.onData((input) => {
+      relayClient.sendEncrypted('pty_input', new TextEncoder().encode(input));
+    });
+
+    return () => {
+      inputListener.dispose();
+      term.dispose();
+      // Deliberately NOT closing relayClient here — closing the one shared
+      // WebSocket on unmount would kill the session; that only happens from
+      // an explicit disconnect/unpair action.
+    };
+  }, [containerRef, relayClient]);
 }
 
-export default function TerminalScreen({ session, onBack, onOpenEncryptionInfo }) {
+export default function TerminalScreen({ session, relayClient, onBack, onOpenEncryptionInfo }) {
   const containerRef = useRef(null);
-  useTerminalSession(containerRef, session?.id);
+  useTerminalSession(containerRef, relayClient);
 
-  // pending -> approved | denied
-  const [permStatus, setPermStatus] = useState('pending');
+  const [ctrlArmed, setCtrlArmed] = useState(false);
+
+  function sendKey(key) {
+    if (!relayClient) return;
+    if (key.kind === 'modifier') {
+      setCtrlArmed((armed) => !armed);
+      return;
+    }
+    let bytes = key.bytes;
+    if (ctrlArmed && bytes.length === 1) {
+      // Ctrl+<letter> -> control byte (Ctrl+A=0x01 .. Ctrl+Z=0x1a).
+      bytes = String.fromCharCode(bytes.toUpperCase().charCodeAt(0) & 0x1f);
+    }
+    relayClient.sendEncrypted('pty_input', new TextEncoder().encode(bytes));
+    setCtrlArmed(false);
+  }
+
+  // No real idle/permission-prompt detection exists yet (PROJECT_PLAN.md
+  // step 6) — default to no prompt so the real terminal isn't blocked by
+  // the demo fixture below on every real session.
+  const [permStatus, setPermStatus] = useState('approved');
 
   return (
     <div className="screen" style={{ position: 'relative' }}>
@@ -47,24 +98,51 @@ export default function TerminalScreen({ session, onBack, onOpenEncryptionInfo }
       {/* xterm.js mounts here */}
       <div
         ref={containerRef}
-        style={{ flex: 1, overflow: 'auto', padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6 }}
+        style={{ flex: 1, overflow: 'auto', padding: relayClient ? 0 : '12px 14px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.6 }}
       >
-        <TerminalPlaceholderContent />
-        <button className="btn btn-secondary elev-sm" style={{ position: 'sticky', bottom: 8, left: '100%', fontSize: 11 }}>
-          ↓ jump to bottom
-        </button>
+        {!relayClient && <TerminalPlaceholderContent />}
+        {!relayClient && (
+          <button className="btn btn-secondary elev-sm" style={{ position: 'sticky', bottom: 8, left: '100%', fontSize: 11 }}>
+            ↓ jump to bottom
+          </button>
+        )}
       </div>
 
       {/* Compact key row */}
       <div style={{ display: 'flex', gap: 6, padding: '8px 10px', borderTop: '1px solid var(--color-divider)', overflowX: 'auto' }}>
         {COMPACT_KEYS.map((k) => (
-          <span key={k} className="tag tag-outline" style={{ fontFamily: 'var(--font-mono)', flex: 'none' }}>{k}</span>
+          <button
+            key={k.label}
+            type="button"
+            className="tag tag-outline"
+            style={{
+              fontFamily: 'var(--font-mono)', flex: 'none', cursor: 'pointer', border: 0,
+              background: k.kind === 'modifier' && ctrlArmed ? 'var(--color-accent)' : undefined,
+            }}
+            onClick={() => sendKey(k)}
+          >
+            {k.label}
+          </button>
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '2px solid var(--color-divider)' }}>
-        <input className="input" style={{ fontFamily: 'var(--font-mono)' }} placeholder="Type a command…" />
-      </div>
+      {/* Plain-text input row — mainly so mobile browsers get a keyboard
+          affordance; xterm.js itself captures direct typing when its
+          hidden textarea has focus, this is a fallback/convenience path
+          that sends a full line + newline on submit. */}
+      <form
+        style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '2px solid var(--color-divider)' }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const input = e.currentTarget.elements.namedItem('cmd');
+          if (relayClient && input.value) {
+            relayClient.sendEncrypted('pty_input', new TextEncoder().encode(input.value + '\n'));
+            input.value = '';
+          }
+        }}
+      >
+        <input name="cmd" className="input" style={{ fontFamily: 'var(--font-mono)' }} placeholder="Type a command…" />
+      </form>
 
       {/* Compact-sheet permission prompt — bottom sheet instead of inline card */}
       {permStatus === 'pending' && (
