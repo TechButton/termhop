@@ -1,0 +1,100 @@
+/* termhop client — design tokens
+ * Ported from the "Modernist" design system in the design handoff
+ * (gui-specification-document/project/_ds/.../styles.css).
+ * Accent locked to #cc6a2e per product decision (2026-07-17).
+ * Every screen/component file should read colors, spacing, radius,
+ * and shadows from these variables — never hard-code a hex or px value.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap');
+
+:root {
+  /* Light frame (used for any surface outside the phone device chrome) */
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-text: #201e1d;
+  --color-divider: color-mix(in srgb, #201e1d 40%, transparent);
+
+  --color-accent: #cc6a2e;
+  --color-accent-100: color-mix(in srgb, var(--color-accent) 12%, white);
+  --color-accent-200: color-mix(in srgb, var(--color-accent) 24%, white);
+  --color-accent-300: color-mix(in srgb, var(--color-accent) 40%, white);
+  --color-accent-400: color-mix(in srgb, var(--color-accent) 65%, white);
+  --color-accent-500: var(--color-accent);
+  --color-accent-600: color-mix(in srgb, var(--color-accent) 85%, black);
+  --color-accent-700: color-mix(in srgb, var(--color-accent) 70%, black);
+  --color-accent-800: color-mix(in srgb, var(--color-accent) 55%, black);
+  --color-accent-900: color-mix(in srgb, var(--color-accent) 40%, black);
+
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-success: #3ecf6e;
+  --color-pending: #e0a736;
+
+  --font-heading: "Archivo", system-ui, sans-serif;
+  --font-heading-weight: 800;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, "SF Mono", Consolas, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Zero radius is intentional — Modernist has no rounded corners. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+}
+
+/* Dark frame — the device chrome (phone screens) runs dark per the
+ * prototype; light frame stays available for any web/desktop surface. */
+.theme-dark {
+  --color-bg: var(--color-neutral-900);
+  --color-surface: var(--color-neutral-800);
+  --color-text: var(--color-neutral-100);
+  --color-divider: color-mix(in srgb, var(--color-neutral-100) 20%, transparent);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+h3 { font-size: 22px; }
+h4 { font-size: 18px; }
+h6 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: .55; }
+
+a { color: var(--color-accent); text-underline-offset: 3px; }
+code { font-family: var(--font-mono); }
+
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }

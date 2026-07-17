@@ -1,0 +1,130 @@
+/* termhop client — component classes, built on tokens.css.
+ * Mirrors the Modernist design system's component contract so any screen
+ * can compose from these rather than inventing parallel styles.
+ */
+
+/* — buttons — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none; user-select: none;
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 14px; line-height: 1.2; color: var(--color-text);
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--color-accent); color: white; border-color: var(--color-accent);
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-accent-600); border-color: var(--color-accent-600); }
+.btn-primary:active:not(:disabled) { background: var(--color-accent-700); }
+
+.btn-secondary {
+  background: var(--color-surface); border-color: var(--color-divider);
+}
+.btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)); }
+
+.btn-ghost { background: transparent; }
+.btn-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 8%, transparent); }
+
+.btn-icon { padding: 8px; }
+
+.btn-block { width: 100%; justify-content: flex-start; }
+.btn-block.btn-primary, .btn-block.btn-secondary { justify-content: center; }
+
+/* — tags — */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  padding: 3px 8px; border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+}
+.tag-accent { background: var(--color-accent-200); color: var(--color-accent-800); }
+.tag-neutral { background: var(--color-neutral-200); color: var(--color-neutral-800); }
+.tag-outline { border: 1px solid var(--color-divider); color: var(--color-text); }
+
+/* — forms — */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; font-weight: 600; opacity: .7; }
+
+.input {
+  font-family: var(--font-body); font-size: 14px; color: var(--color-text);
+  background: var(--color-surface); border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm); padding: 10px 12px; width: 100%;
+}
+.input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -1px; }
+.input::placeholder { color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+
+.radio { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.radio input[type="radio"], .radio input[type="checkbox"] { accent-color: var(--color-accent); }
+
+.seg { display: inline-flex; border: 1px solid var(--color-divider); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-opt {
+  font-size: 12px; padding: 6px 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+}
+.seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: white; }
+.seg-opt:not(:last-child) { border-right: 1px solid var(--color-divider); }
+
+/* — cards — */
+.card {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--color-surface); border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.card-kicker { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; opacity: .6; }
+.card-body { margin: 0; font-size: 13px; }
+.elev-sm { box-shadow: var(--shadow-sm); }
+.elev-md { box-shadow: var(--shadow-md); }
+.elev-lg { box-shadow: var(--shadow-lg); }
+
+/* — status dots — */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.status-dot--live { background: var(--color-success); }
+.status-dot--idle { background: var(--color-pending); }
+.status-dot--waiting { background: var(--color-accent); animation: dotPulse 1.2s ease-in-out infinite; }
+.status-dot--offline { background: var(--color-neutral-500); }
+@keyframes dotPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+/* — dividers — */
+.hr { height: 2px; border: 0; margin: var(--space-4) 0; background: var(--color-divider); }
+
+/* — dialogs — */
+.dialog-backdrop {
+  position: fixed; inset: 0; background: color-mix(in srgb, black 55%, transparent);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 100;
+}
+.dialog {
+  background: var(--color-bg); color: var(--color-text);
+  width: 100%; max-width: 420px; padding: var(--space-4);
+  border-top: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.dialog-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 16px; }
+.dialog-body { font-size: 13px; opacity: .8; line-height: 1.5; }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* — bottom sheet (compact terminal permission prompt) — */
+.sheet-backdrop {
+  position: absolute; inset: 0; background: color-mix(in srgb, black 45%, transparent);
+  display: flex; align-items: flex-end; z-index: 50;
+}
+.sheet {
+  width: 100%; background: var(--color-surface); border-top: 2px solid var(--color-accent);
+  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2);
+}
+
+/* — screen scaffolding shared by every screen component — */
+.screen { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.screen-header {
+  display: flex; align-items: center; gap: 10px; padding: 16px 18px;
+  border-bottom: 2px solid var(--color-divider); flex: none;
+}
+.screen-header h3 { margin: 0; flex: 1; }
+.screen-body { flex: 1; overflow: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.screen-footer { padding: 14px 18px; border-top: 2px solid var(--color-divider); flex: none; }

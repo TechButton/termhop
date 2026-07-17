@@ -1,0 +1,26 @@
+# Python (relay-server, agent/)
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node (client/)
+node_modules/
+dist/
+.vite/
+
+# Env / secrets — never commit real relay URLs, tokens, or keys
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

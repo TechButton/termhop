@@ -1,0 +1,20 @@
+# Placeholder — relay-server/ doesn't exist yet (see relay-server/README.md).
+# Referenced by DEPLOYMENT.md's "Docker Compose (recommended)" path.
+# Fill this in once relay-server/ has a Dockerfile and requirements.
+
+# services:
+#   relay:
+#     build: ./relay-server
+#     ports:
+#       - "8080:8080"
+#     environment:
+#       - DOMAIN=${DOMAIN}
+#     depends_on:
+#       - redis
+#   redis:
+#     image: redis:7-alpine
+#     volumes:
+#       - redis-data:/data
+#
+# volumes:
+#   redis-data:
