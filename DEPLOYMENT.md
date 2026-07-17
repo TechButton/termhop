@@ -108,6 +108,7 @@ context spawned terminals run under, worth choosing deliberately).
 ## 4. Verifying Your Deployment
 
 - Confirm `wss://` (not `ws://`) is what the client actually connects to — check browser devtools network tab or agent logs.
+- Confirm the relay's port is **not** reachable directly from outside the host (e.g. `curl http://<server-ip>:8080/healthz` from another machine should fail/time out) — only the reverse proxy's 80/443 should be reachable. `docker-compose.yml` publishes the relay port bound to `127.0.0.1` for exactly this reason; if you've customized the compose file, don't drop that binding. Found live on a real deployment during this project's own beta rollout — nginx was correctly terminating TLS, but the relay's plain port was *also* open to the world in parallel, letting anyone connect over unencrypted `ws://` and bypass TLS entirely.
 - Confirm the relay's logs do **not** contain PTY content — see the checklist in `SECURITY.md` section "Before First Public Release."
 - Test idle-alert delivery end-to-end before relying on it.
 

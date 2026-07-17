@@ -71,7 +71,12 @@ so neither can starve the other or the host OS:
 git clone <repo-url> termhop && cd termhop
 cp ops/beta-server.local.md.example ops/beta-server.local.md   # fill in real host details, never committed
 cp .env.example .env   # fill in DOMAIN, etc. — also gitignored
-docker compose --profile beta up -d
+
+# Name the beta services explicitly — `docker compose --profile beta up -d`
+# with no service names also starts the plain relay/redis services (any
+# service with no `profiles:` key runs regardless of --profile), which
+# defeats the memory caps this profile exists for.
+docker compose --profile beta up -d --build relay-beta redis-beta
 ```
 
 (`docker-compose.yml`'s `beta` profile applies the memory limits above;

@@ -2,13 +2,28 @@
 #   default — no memory limits, for a normal-sized box.
 #   beta    — explicit memory ceilings sized for the ~1.25GB beta relay
 #             box (see ops/beta-tier.md). Run with:
-#               docker compose --profile beta up -d
+#               docker compose --profile beta up -d relay-beta redis-beta
+#
+# relay-beta/redis-beta are NOT defined via `extends` — Compose's `extends`
+# merges (unions) `depends_on` with the base service rather than replacing
+# it (confirmed via `docker compose config`), so an earlier version of this
+# file had relay-beta silently depending on BOTH redis and redis-beta,
+# starting the unbounded base redis alongside the memory-capped one and
+# defeating the whole point of the beta profile. Full standalone service
+# definitions avoid that footgun entirely.
 
 services:
   relay:
     build: ./relay-server
     ports:
-      - "${RELAY_PORT:-8080}:8080"
+      # Bound to loopback only — the relay is never meant to be reached
+      # directly. Traffic must go through a TLS-terminating reverse proxy
+      # (see DEPLOYMENT.md) on the same host; a plain 0.0.0.0 publish here
+      # would let anyone connect over unencrypted ws://, bypassing the
+      # "wss:// only" requirement entirely (found live on the beta box —
+      # nginx was terminating TLS correctly, but port 8080 was ALSO open
+      # to the world in plaintext alongside it).
+      - "127.0.0.1:${RELAY_PORT:-8080}:8080"
     environment:
       - DOMAIN=${DOMAIN}
       - REDIS_URL=${REDIS_URL}
@@ -17,12 +32,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-
-  relay-beta:
-    extends: relay
-    profiles: ["beta"]
-    mem_limit: 300m       # relay process itself is small — this is generous headroom
-    mem_reservation: 150m
 
   redis:
     image: redis:7-alpine
@@ -35,12 +44,44 @@ services:
       retries: 5
     restart: unless-stopped
 
-  redis-beta:
-    extends: redis
+  relay-beta:
     profiles: ["beta"]
+    build: ./relay-server
+    ports:
+      # Bound to loopback only — the relay is never meant to be reached
+      # directly. Traffic must go through a TLS-terminating reverse proxy
+      # (see DEPLOYMENT.md) on the same host; a plain 0.0.0.0 publish here
+      # would let anyone connect over unencrypted ws://, bypassing the
+      # "wss:// only" requirement entirely (found live on the beta box —
+      # nginx was terminating TLS correctly, but port 8080 was ALSO open
+      # to the world in plaintext alongside it).
+      - "127.0.0.1:${RELAY_PORT:-8080}:8080"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - REDIS_URL=redis://redis-beta:6379/0
+      - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
+    mem_limit: 300m       # relay process itself is small — this is generous headroom
+    mem_reservation: 150m
+    depends_on:
+      redis-beta:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis-beta:
+    profiles: ["beta"]
+    image: redis:7-alpine
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-beta-data:/data
     mem_limit: 160m
     mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   redis-data:
+  redis-beta-data:
