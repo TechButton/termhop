@@ -1,9 +1,14 @@
-# termhop agent (Linux) CLI — `termhop-agent pair --relay wss://...`.
+# termhop agent (macOS) CLI — `termhop-agent pair --relay wss://...`.
 #
-# Scope for this build step (PROJECT_PLAN.md step 2): pair once, then spawn
+# Parallel structure to agent/linux/main.py — only the PTY backend import
+# and the default-shell fallback literal differ (macOS has defaulted new
+# accounts to zsh since Catalina; $SHELL itself is set identically to
+# Linux, this only matters if $SHELL is somehow unset).
+#
+# Scope for this build step (PROJECT_PLAN.md step 5): pair once, then spawn
 # and stream exactly one PTY until it exits or the peer disconnects. No
 # persisted device key yet, so every restart re-pairs from scratch — this is
-# a known operational gap (see agent/linux/README.md), not an oversight.
+# a known operational gap (see agent/macos/README.md), not an oversight.
 import argparse
 import asyncio
 import logging
@@ -15,7 +20,7 @@ from common.config import load_config, save_config
 from common.pairing_link import build_pairing_uri
 from common.relay_client import HandshakeError, RelayClient
 from common.session_pump import run_pty_session
-from linux.pty_backend import PtyLinuxBackend
+from macos.pty_backend import PtyMacosBackend
 
 _logger = logging.getLogger("termhop.agent")
 
@@ -45,8 +50,8 @@ async def _pair_and_stream(relay_url: str) -> int:
 
     print("Paired. Starting shell session.")
 
-    backend = PtyLinuxBackend()
-    shell = os.environ.get("SHELL", "/bin/bash")
+    backend = PtyMacosBackend()
+    shell = os.environ.get("SHELL", "/bin/zsh")
     backend.spawn([shell])
 
     await run_pty_session(client, backend)

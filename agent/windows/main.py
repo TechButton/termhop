@@ -1,9 +1,18 @@
-# termhop agent (Linux) CLI — `termhop-agent pair --relay wss://...`.
+# termhop agent (Windows) CLI — `termhop-agent pair --relay wss://...`.
 #
-# Scope for this build step (PROJECT_PLAN.md step 2): pair once, then spawn
+# Parallel structure to agent/linux/main.py and agent/macos/main.py — the
+# PTY backend import and default-shell fallback differ. No $SHELL on
+# Windows; COMSPEC is the actual Windows analog (nearly always set to
+# cmd.exe) and matches the same env-var-driven default-lookup pattern the
+# other two platforms use. Deliberately NOT defaulting to
+# powershell.exe/pwsh.exe — that's a second binary-name ambiguity across
+# PowerShell versions; multi-shell selection belongs in a future per-
+# session feature, not this agent's zero-argument default.
+#
+# Scope for this build step (PROJECT_PLAN.md step 4): pair once, then spawn
 # and stream exactly one PTY until it exits or the peer disconnects. No
 # persisted device key yet, so every restart re-pairs from scratch — this is
-# a known operational gap (see agent/linux/README.md), not an oversight.
+# a known operational gap (see agent/windows/README.md), not an oversight.
 import argparse
 import asyncio
 import logging
@@ -15,7 +24,7 @@ from common.config import load_config, save_config
 from common.pairing_link import build_pairing_uri
 from common.relay_client import HandshakeError, RelayClient
 from common.session_pump import run_pty_session
-from linux.pty_backend import PtyLinuxBackend
+from windows.pty_backend import PtyWindowsBackend
 
 _logger = logging.getLogger("termhop.agent")
 
@@ -45,8 +54,8 @@ async def _pair_and_stream(relay_url: str) -> int:
 
     print("Paired. Starting shell session.")
 
-    backend = PtyLinuxBackend()
-    shell = os.environ.get("SHELL", "/bin/bash")
+    backend = PtyWindowsBackend()
+    shell = os.environ.get("COMSPEC", "cmd.exe")
     backend.spawn([shell])
 
     await run_pty_session(client, backend)
