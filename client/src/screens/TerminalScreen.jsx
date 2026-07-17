@@ -6,6 +6,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+// REQUIRED — xterm.js ships this stylesheet to hide/position its internal
+// helper elements (the accessibility live-region row mirror, the keyboard-
+// input helper textarea, the cursor layer). Without it those elements
+// render visibly, unstyled, overlapping the real terminal content — this
+// was the actual cause of the garbled repeated-character row that showed
+// up at the top of every real session; several other theories (resize
+// timing, font loading) were ruled out by direct DOM inspection before
+// finding this was simply a missing required import.
+import '@xterm/xterm/css/xterm.css';
 import { BackIcon, DotsIcon, LockIcon, ChevronDownIcon } from '../icons';
 
 const COMPACT_KEYS = [
