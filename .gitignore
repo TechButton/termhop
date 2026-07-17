@@ -16,6 +16,11 @@ dist/
 .env.*
 !.env.example
 
+# Real infrastructure details (IP, hostname, SSH config) — see
+# ops/beta-server.local.md.example for the template that IS tracked.
+ops/beta-server.local.md
+ops/*.local.md
+
 # OS
 .DS_Store
 Thumbs.db

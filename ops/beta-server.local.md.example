@@ -1,0 +1,42 @@
+# Beta relay — real host details (LOCAL ONLY, NEVER COMMIT)
+#
+# Copy this file to `ops/beta-server.local.md` (already gitignored) and
+# fill in the real values there. This template file itself is the only
+# one tracked in git — it should never contain real infrastructure
+# details.
+
+## Host
+
+- IP:
+- Hostname:
+- Provider / account:
+- Node / region:
+
+## Access
+
+- SSH key location (local path, never the key itself):
+- SSH user:
+
+## Specs (as provisioned)
+
+- vCPU:
+- RAM:
+- Disk:
+- Bandwidth/month:
+- OS:
+
+## History / provenance
+
+- Prior use of this box (if repurposed):
+- Decommission checklist completed: [ ] yes, see ops/decommission-checklist.md
+- Date repurposed for termhop:
+
+## DNS
+
+- Domain/subdomain pointed at this host:
+- DNS provider / where to change it:
+- Current TTL:
+
+## Notes
+
+-

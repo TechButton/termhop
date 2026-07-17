@@ -44,6 +44,16 @@ Full rationale for all of these: `SECURITY.md`.
 | `client/` | **scaffolded, not wired up** | React screens matching the design handoff. See `client/README.md` for exactly what's real vs. stubbed. |
 | `relay-server/` | **not started** | See `relay-server/README.md` for scope |
 | `agent/common/`, `agent/linux/`, `agent/macos/`, `agent/windows/` | **not started** | See each dir's README |
+| `ops/` | **beta deployment tier** | `ops/beta-tier.md` (deployment steps), `ops/decommission-checklist.md`, `ops/DECISIONS.md` (hosting decision log). Real host details go in `ops/beta-server.local.md`, which is gitignored — never add real IPs/hostnames to tracked files. |
+
+## Handling infrastructure details
+
+This repo is intended to go public (AGPL-3.0). **Never commit real IPs,
+hostnames, SSH details, or credentials** — even in docs, even temporarily.
+Use `.env` (gitignored, `.env.example` tracked) and `ops/*.local.md`
+(gitignored, `.example` templates tracked) for anything host-specific.
+If asked to document a real deployment, follow this pattern rather than
+writing real values into a tracked file.
 
 ## Suggested build order
 
