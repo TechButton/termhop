@@ -22,11 +22,13 @@ reconstructing it from git log later.
   up to `~/backups/` on the box, pm2 process stopped, `mcic` user and its
   nginx conf removed. Box itself was repurposed, not wiped.
 
-The live services above remain on the pre-v2 build. The protocol-v2 work below
-is local and requires a coordinated relay + agent + client cutover; no service
-was restarted or deployed while the current live terminal session was using it.
+The hosted protocol-v2 cutover was deployed on 2026-07-17 from public revision
+`0dc7ab3` and private control-plane revision `014e21a`. The public relay health
+endpoint reports protocol 2 and release `0dc7ab3`; nginx serves the hosted
+client from a versioned static directory. Existing installed pre-v2 agents
+still require upgrade and re-pairing.
 
-## Local protocol-v2/security pass — built, verified, pending cutover
+## Protocol-v2/security pass — built, verified, hosted cutover deployed
 
 - Authenticated pairing URI now carries a relay routing token, a separate
   256-bit secret that never enters a relay envelope, pinned agent public key,
@@ -57,7 +59,7 @@ was restarted or deployed while the current live terminal session was using it.
   including all 3 Docker tenant-isolation tests; Ruff and mypy clean;
   production client build succeeds.
 
-## relay-server/ — functional beta; v2 security cutover pending
+## relay-server/ — protocol-v2 beta deployed
 
 FastAPI + Redis. Envelope validation, pairing (atomic single-use tokens,
 SHA-256-hashed at rest, Lua-script CAS consumption in Redis), session

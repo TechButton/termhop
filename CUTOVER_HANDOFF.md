@@ -1,20 +1,29 @@
 # Protocol v2 hosted cutover handoff
 
-Status recorded 2026-07-17. This is the restart/deployment handoff for a new
-SSH session. It supplements `PROGRESS.md`; do not reconstruct the rollout from
-chat history.
+Status updated 2026-07-17 after the hosted protocol-v2 cutover. It supplements
+`PROGRESS.md`; do not reconstruct the rollout from chat history.
 
-## Current state
+## Cutover result
 
-- All work is source-only and uncommitted in two repositories:
-  - `/home/kyle/tools/termhop`
-  - `/home/kyle/tools/termhop-control-plane`
-- The live services were not rebuilt, restarted, or deployed during the work.
-- The live relay, client, and agents remain on the pre-v2 protocol.
+- Public source revision: `0dc7ab3` (`termhop`).
+- Private source revision: `014e21a` (`termhop-control-plane`).
+- The live relay runs protocol v2 and `/healthz` reports release `0dc7ab3`.
+- The live control plane runs image revision `014e21a`.
+- Nginx serves the hosted client from
+  `/var/www/termhop-client-releases/0dc7ab3`.
+- A disposable Linux agent/browser smoke test completed reviewed pairing, real
+  encrypted PTY I/O, computed fingerprint display, agent termination,
+  durable reconnection with fresh keys, replacement shell startup, and
+  post-restart terminal I/O against the public deployment.
+- Existing pre-v2 installed agents still require upgrade and re-pairing.
 - `.playwright-mcp/` is pre-existing untracked user data; do not add, modify,
   or delete it.
-- Commit the public and private repositories independently before deployment so
-  rollback has exact source revisions.
+
+Rollback assets are in
+`/home/claude/backups/termhop-v2-cutover-20260718T0019Z` on the beta server.
+The pre-v2 image tags are `termhop-relay-beta:pre-v2-f267581` and
+`termhop-control-plane-app:pre-v2-2a213e7`; the original static directory
+`/var/www/termhop-client` is unchanged.
 
 ## Verified locally
 
@@ -95,6 +104,10 @@ the SSH daemon or remove the old relay/client artifacts during verification.
 - Relay logs/Redis contain no terminal plaintext, pairing secret, durable
   device secret, or raw routing token.
 
+The public relay/client and disposable-agent checks above passed. Still
+required manually: authenticated existing-account login -> `/client` handoff
+using real credentials, and upgrade/re-pair of each actual installed agent.
+
 ## Rollback boundary
 
 Roll back relay, client, and agents together to the recorded pre-v2 revisions.
@@ -107,5 +120,6 @@ old static assets until the full terminal/reconnection smoke test passes.
 - Independent security review of initial pairing and durable reconnection.
 - Real macOS launchd and Windows Scheduled Task/ConPTY verification.
 - Decide CSP/reverse-proxy headers for the hosted client, especially because
-  browser site data contains a terminal-access credential.
+  browser site data contains a terminal-access credential. The deployed client
+  currently returns no CSP or related hardening headers.
 - Decide final public repository URL/name before replacing `<you>` placeholders.
