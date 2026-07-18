@@ -28,6 +28,8 @@ services:
       - DOMAIN=${DOMAIN}
       - REDIS_URL=${REDIS_URL}
       - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
+      - PROTOCOL_VERSION=${PROTOCOL_VERSION:-2}
+      - TERMHOP_RELEASE=${TERMHOP_RELEASE:-development}
     depends_on:
       redis:
         condition: service_healthy
@@ -60,6 +62,8 @@ services:
       - DOMAIN=${DOMAIN}
       - REDIS_URL=redis://redis-beta:6379/0
       - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
+      - PROTOCOL_VERSION=${PROTOCOL_VERSION:-2}
+      - TERMHOP_RELEASE=${TERMHOP_RELEASE:-development}
     mem_limit: 300m       # relay process itself is small — this is generous headroom
     mem_reservation: 150m
     depends_on:
