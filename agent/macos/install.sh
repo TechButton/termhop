@@ -10,7 +10,7 @@
 # oversight, a deliberate v1 scope limit matching Linux's own.
 set -eu
 
-REPO_URL="${TERMHOP_REPO_URL:-https://github.com/<you>/termhop.git}"
+REPO_URL="${TERMHOP_REPO_URL:-https://github.com/TechButton/termhop.git}"
 INSTALL_DIR="${TERMHOP_INSTALL_DIR:-$HOME/.local/share/termhop}"
 BIN_DIR="$HOME/.local/bin"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"

@@ -14,7 +14,7 @@ typical open-source project — please read before opening a PR.
 ## Getting Started
 
 ```bash
-git clone https://github.com/<you>/termhop
+git clone https://github.com/TechButton/termhop
 cd termhop
 # relay-server: Python 3.11+, FastAPI
 cd relay-server && pip install -r requirements-dev.txt

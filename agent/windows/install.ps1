@@ -18,7 +18,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$RepoUrl = if ($env:TERMHOP_REPO_URL) { $env:TERMHOP_REPO_URL } else { "https://github.com/<you>/termhop.git" }
+$RepoUrl = if ($env:TERMHOP_REPO_URL) { $env:TERMHOP_REPO_URL } else { "https://github.com/TechButton/termhop.git" }
 $InstallDir = if ($env:TERMHOP_INSTALL_DIR) { $env:TERMHOP_INSTALL_DIR } else { "$env:LOCALAPPDATA\termhop" }
 $BinDir = "$env:LOCALAPPDATA\termhop\bin"
 $TaskName = "TermhopAgent"

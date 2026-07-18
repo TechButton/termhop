@@ -9,7 +9,7 @@
 # this one), not an oversight.
 set -eu
 
-REPO_URL="${TERMHOP_REPO_URL:-https://github.com/<you>/termhop.git}"
+REPO_URL="${TERMHOP_REPO_URL:-https://github.com/TechButton/termhop.git}"
 INSTALL_DIR="${TERMHOP_INSTALL_DIR:-$HOME/.local/share/termhop}"
 BIN_DIR="$HOME/.local/bin"
 UNIT_DIR="$HOME/.config/systemd/user"

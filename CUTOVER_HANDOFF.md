@@ -122,4 +122,4 @@ old static assets until the full terminal/reconnection smoke test passes.
 - Decide CSP/reverse-proxy headers for the hosted client, especially because
   browser site data contains a terminal-access credential. The deployed client
   currently returns no CSP or related hardening headers.
-- Decide final public repository URL/name before replacing `<you>` placeholders.
+- Public repository finalized as `https://github.com/TechButton/termhop`.

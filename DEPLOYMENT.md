@@ -12,7 +12,7 @@ requires a third-party hosted service — that's the point.
 ### Option A — Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/<you>/termhop
+git clone https://github.com/TechButton/termhop
 cd termhop/relay-server
 cp .env.example .env
 # edit .env: set DOMAIN, RELAY_PORT, REDIS settings if using session persistence
@@ -61,7 +61,7 @@ The agent needs outbound network access to your relay's `wss://` endpoint.
 ### Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<you>/termhop/main/agent/linux/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/TechButton/termhop/main/agent/linux/install.sh | sh
 termhop-agent pair --relay wss://relay.yourdomain.com
 ```
 
@@ -79,8 +79,7 @@ loginctl enable-linger $USER
 ### macOS
 
 ```bash
-brew install <you>/termhop/termhop-agent
-# or: download the notarized .app from Releases
+curl -fsSL https://raw.githubusercontent.com/TechButton/termhop/main/agent/macos/install.sh | sh
 termhop-agent pair --relay wss://relay.yourdomain.com
 ```
 
@@ -90,7 +89,7 @@ runs under your user account.
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/<you>/termhop/main/agent/windows/install.ps1 | iex
+irm https://raw.githubusercontent.com/TechButton/termhop/main/agent/windows/install.ps1 | iex
 termhop-agent.exe pair --relay wss://relay.yourdomain.com
 ```
 

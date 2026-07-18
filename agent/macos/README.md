@@ -25,7 +25,7 @@ termhop-agent pair --relay wss://...   # via: python -m macos.main pair --relay 
 ## Install as a launchd agent
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<you>/termhop/main/agent/macos/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/TechButton/termhop/main/agent/macos/install.sh | sh
 termhop-agent pair --relay wss://relay.yourdomain.com
 ```
 
