@@ -6,22 +6,17 @@
 // primitives). HKDF from the browser's native SubtleCrypto — RFC 5869
 // like Python's `cryptography` HKDF.
 //
-// Pinned parameters (must match agent/common/crypto.py exactly):
-//   - KDF: HKDF-SHA256, info="termhop-session-key-v1", 32-byte key.
-//   - Salt: an EXPLICIT 32-byte all-zero buffer — NOT an empty Uint8Array.
-//     Python's `cryptography` HKDF treats salt=None as an all-zero salt of
-//     hash length (RFC 5869 §2.2); Web Crypto's HKDF has no "None" sentinel
-//     and requires an explicit salt buffer. An empty salt is NOT equivalent
-//     and produces a different key — verified against a cross-language
-//     fixed vector in crypto.test.js, not just asserted here.
+// Pinned protocol-v2 parameters (must match agent/common/crypto.py exactly):
+//   - KDF: HKDF-SHA256 with the 256-bit out-of-band pairing secret as salt
+//     and the canonical transcript hash in info.
+//   - Output: independent agent->client, client->agent, and proof keys.
 //   - AEAD: XChaCha20-Poly1305, 24-byte random nonce per message, combined
-//     ciphertext+tag (matches libsodium's combined mode).
+//     ciphertext+tag, with direction/type/session/sequence bound as AAD.
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { x25519 } from "@noble/curves/ed25519";
 
-const HKDF_INFO = new TextEncoder().encode("termhop-session-key-v1");
-const HKDF_SALT = new Uint8Array(32); // explicit all-zero — see module docstring
-const SESSION_KEY_LEN_BITS = 256;
+const HKDF_INFO_PREFIX = new TextEncoder().encode("termhop-handshake-v2\0");
+const KEY_MATERIAL_LEN_BITS = 768;
 const NONCE_LEN = 24;
 
 export class CryptoError extends Error {}
@@ -32,7 +27,13 @@ export function generateEphemeralKeypair() {
   return { privateKey, publicKey };
 }
 
-export async function deriveSessionKey(ownPrivateKey, peerPublicKey) {
+export function handshakeTranscript({ sessionId, token, agentPubkeyB64, clientPubkeyB64 }) {
+  return new TextEncoder().encode(
+    `termhop-handshake-v2\nsession_id=${sessionId}\ntoken=${token}\nagent_pubkey=${agentPubkeyB64}\nclient_pubkey=${clientPubkeyB64}`
+  );
+}
+
+export async function deriveSessionKeys(ownPrivateKey, peerPublicKey, pairingSecret, transcript) {
   let sharedSecret;
   try {
     sharedSecret = x25519.getSharedSecret(ownPrivateKey, peerPublicKey);
@@ -40,23 +41,63 @@ export async function deriveSessionKey(ownPrivateKey, peerPublicKey) {
     throw new CryptoError(`ECDH failed: ${err.message}`);
   }
 
+  const transcriptHash = new Uint8Array(await crypto.subtle.digest("SHA-256", transcript));
+  const info = new Uint8Array(HKDF_INFO_PREFIX.length + transcriptHash.length);
+  info.set(HKDF_INFO_PREFIX);
+  info.set(transcriptHash, HKDF_INFO_PREFIX.length);
+  const salt = fromBase64Url(pairingSecret);
+  if (salt.length !== 32) throw new CryptoError("pairing secret must decode to exactly 32 bytes");
+
   const keyMaterial = await crypto.subtle.importKey("raw", sharedSecret, "HKDF", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: HKDF_SALT, info: HKDF_INFO },
+    { name: "HKDF", hash: "SHA-256", salt, info },
     keyMaterial,
-    SESSION_KEY_LEN_BITS
+    KEY_MATERIAL_LEN_BITS
   );
-  return new Uint8Array(bits);
+  const material = new Uint8Array(bits);
+  return {
+    agentToClient: material.slice(0, 32),
+    clientToAgent: material.slice(32, 64),
+    proof: material.slice(64, 96),
+  };
 }
 
-export function encrypt(key, plaintext) {
+export async function pairingProof(proofKey, transcript, role) {
+  if (role !== "agent" && role !== "client") throw new CryptoError(`invalid proof role: ${role}`);
+  const suffix = new TextEncoder().encode(`\nrole=${role}`);
+  const message = new Uint8Array(transcript.length + suffix.length);
+  message.set(transcript);
+  message.set(suffix, transcript.length);
+  const hmacKey = await crypto.subtle.importKey("raw", proofKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return toBase64(new Uint8Array(await crypto.subtle.sign("HMAC", hmacKey, message)));
+}
+
+export async function verifyPairingProof(proofKey, transcript, role, proofB64) {
+  const expected = fromBase64(await pairingProof(proofKey, transcript, role));
+  const actual = fromBase64(proofB64);
+  if (expected.length !== actual.length) return false;
+  let different = 0;
+  for (let i = 0; i < expected.length; i++) different |= expected[i] ^ actual[i];
+  return different === 0;
+}
+
+export function messageAad({ type, sessionId, seq, direction }) {
+  if (direction !== "agent_to_client" && direction !== "client_to_agent") {
+    throw new CryptoError(`invalid message direction: ${direction}`);
+  }
+  return new TextEncoder().encode(
+    `termhop-message-v2\ndirection=${direction}\ntype=${type}\nsession_id=${sessionId}\nseq=${seq}`
+  );
+}
+
+export function encrypt(key, plaintext, aad) {
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_LEN));
-  const cipher = xchacha20poly1305(key, nonce);
+  const cipher = xchacha20poly1305(key, nonce, aad);
   const ciphertext = cipher.encrypt(plaintext);
   return { nonceB64: toBase64(nonce), ciphertextB64: toBase64(ciphertext) };
 }
 
-export function decrypt(key, nonceB64, ciphertextB64) {
+export function decrypt(key, nonceB64, ciphertextB64, aad) {
   let nonce, ciphertext;
   try {
     nonce = fromBase64(nonceB64);
@@ -66,7 +107,7 @@ export function decrypt(key, nonceB64, ciphertextB64) {
   }
 
   try {
-    const cipher = xchacha20poly1305(key, nonce);
+    const cipher = xchacha20poly1305(key, nonce, aad);
     return cipher.decrypt(ciphertext);
   } catch (err) {
     throw new CryptoError(`decryption/authentication failed: ${err.message}`);
@@ -79,10 +120,27 @@ export function encodePubkey(pubkeyRaw) {
 
 export function decodePubkey(pubkeyB64) {
   try {
-    return fromBase64(pubkeyB64);
+    const key = fromBase64(pubkeyB64);
+    if (key.length !== 32) throw new CryptoError("public key must decode to exactly 32 bytes");
+    return key;
   } catch (err) {
     throw new CryptoError(`invalid base64 pubkey: ${err.message}`);
   }
+}
+
+export async function sessionFingerprint(sessionKeys, transcript) {
+  if (!sessionKeys || !transcript) return null;
+  const label = new TextEncoder().encode("termhop-session-fingerprint-v2\0");
+  const material = new Uint8Array(label.length + transcript.length + 64);
+  material.set(label);
+  material.set(transcript, label.length);
+  material.set(sessionKeys.agentToClient, label.length + transcript.length);
+  material.set(sessionKeys.clientToAgent, label.length + transcript.length + 32);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", material));
+  return Array.from(digest.slice(0, 6), (byte) => byte.toString(16).padStart(2, "0").toUpperCase())
+    .join("")
+    .match(/.{1,4}/g)
+    .join(" ");
 }
 
 function toBase64(bytes) {
@@ -96,4 +154,9 @@ function fromBase64(b64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function fromBase64Url(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  return fromBase64(normalized + "=".repeat((4 - (normalized.length % 4)) % 4));
 }

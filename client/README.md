@@ -40,15 +40,12 @@ client/
 
 ## What's real vs. stubbed
 
-- **Real:** all layout, styling, component states (pairing status machine,
-  agent card expand/collapse, sort toggles, form fields, all three dialogs).
+- **Real:** full-viewport responsive landing/layout, optional hosted-login
+  handoff, authenticated protocol-v2 pairing and saved-device reconnection,
+  encrypted xterm.js I/O, terminal resize synchronization, virtual keys,
+  agent card expand/collapse, sort toggles, form fields, and dialogs.
 - **Stubbed, clearly marked in comments:**
-  - `PairingScreen` — `startPair()` fakes the connecting → handshaking →
-    paired timeline with `setTimeout`. Replace with the real relay
-    WebSocket + ECDH handshake per `PROTOCOL.md`.
-  - `TerminalScreen` — `useTerminalSession()` is an empty hook with the
-    real xterm.js + encrypted pty_data/pty_input wiring commented in as
-    a guide. `xterm` is already a declared dependency.
+  - `PairingScreen` — paste-link pairing is real; camera QR scanning is not.
   - `HomeScreen` — session lists are hardcoded fixtures. Replace with the
     live `session_list` message from the agent (see `PROTOCOL.md`).
   - `AgentStatusScreen` — same, hardcoded agent fixtures.
@@ -64,14 +61,18 @@ npm install
 npm run dev
 ```
 
+Direct pairing works without an account. To link an operator's optional account
+site, copy `.env.example` and set `VITE_CONTROL_PLANE_URL`. The account site
+redirects back with a one-minute single-use `#handoff` code; the client POSTs
+it to `/api/client/exchange`, clears it from browser history immediately, and
+receives account/relay metadata plus a revocable scoped access token. Endpoint
+device secrets stay in browser site data and never enter this exchange.
+
 ## Not yet done
 
-- xterm.js mount + real terminal I/O (see stub above).
 - Capacitor wrapper for push notifications and home-screen install
   (per `PROJECT_PLAN.md` build order, this comes after the web client is
   validated on its own).
-- Virtual key row is currently static (compact 13-key set); wiring key
-  presses to actual terminal input (Ctrl-combos, arrows) is part of the
-  xterm.js integration.
-- Responsive/desktop-browser layout — screens are currently sized for
-  the phone frame only, per the prototype.
+- Multi-PTY session management and live data for the fixture-driven management
+  screens. Durable device reconnection is implemented, but an OS reboot starts
+  a replacement shell because no process can survive an OS reboot.

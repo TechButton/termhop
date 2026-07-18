@@ -14,15 +14,17 @@ async def _paired_session(relay_server_url, session_id: str, token: str) -> tupl
     agent = await FakePeer.connect(relay_server_url, "agent")
     client = await FakePeer.connect(relay_server_url, "client")
 
-    await agent.send("pair_init", payload={"token": token, "agent_pubkey": "AP", "session_id": session_id})
+    await agent.send("pair_init", payload={"token": token, "agent_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "session_id": session_id})
     await agent.recv()  # pair_init_ack
 
-    await client.send("pair_request", payload={"token": token, "client_pubkey": "CP"})
+    await client.send(
+        "pair_request", payload={"token": token, "client_pubkey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=", "client_proof": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="}
+    )
     await client.recv()  # pair_challenge
     await agent.recv()  # pair_challenge
 
-    await agent.send("pair_complete", session_id=session_id)
-    await client.send("pair_complete", session_id=session_id)
+    await agent.send("pair_complete", session_id=session_id, payload={"agent_proof": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="})
+    await client.recv()  # pair_complete
     return agent, client
 
 

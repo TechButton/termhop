@@ -28,7 +28,12 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict:
-        return {"status": "ok"}
+        cfg = app.state.config
+        return {
+            "status": "ok",
+            "protocol_version": cfg.protocol_version,
+            "release": cfg.release,
+        }
 
     return app
 

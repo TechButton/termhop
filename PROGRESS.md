@@ -22,13 +22,48 @@ reconstructing it from git log later.
   up to `~/backups/` on the box, pm2 process stopped, `mcic` user and its
   nginx conf removed. Box itself was repurposed, not wiped.
 
-## relay-server/ — done
+The live services above remain on the pre-v2 build. The protocol-v2 work below
+is local and requires a coordinated relay + agent + client cutover; no service
+was restarted or deployed while the current live terminal session was using it.
+
+## Local protocol-v2/security pass — built, verified, pending cutover
+
+- Authenticated pairing URI now carries a relay routing token, a separate
+  256-bit secret that never enters a relay envelope, pinned agent public key,
+  and pinned session ID. Both endpoints exchange transcript/role-bound proofs.
+- HKDF derives separate agent→client, client→agent, and proof keys. Encrypted
+  messages bind direction/type/session/sequence as XChaCha20-Poly1305 AAD;
+  endpoints reject replayed encrypted sequences.
+- Relay hashes raw tokens in both pairing and rate-limit Redis keys, binds each
+  socket to one role/session, rejects duplicate attachments, cross-session
+  routing, and non-monotonic connection sequences.
+- Browser client buffers handshake/initial PTY messages that arrive before a
+  waiter or terminal mount. xterm dimensions now produce `session_resize`.
+- Shared app shell fills the dynamic viewport at phone and desktop sizes;
+  terminal code is lazy-loaded so xterm.js is not in the initial pairing bundle.
+- Responsive client landing supports an optional hosted-login handoff while
+  direct self-hosted pairing stays enabled by default. The sibling hosted
+  control-plane now has a redesigned homepage, dashboard-to-client link,
+  single-use handoff, origin-restricted exchange, and revocable client token.
+- Initial pairing delivers a separate durable device credential only after
+  mutual authentication and inside E2E encryption. After an agent/PC reboot,
+  the browser negotiates fresh keys and retries reconnection automatically;
+  the destroyed PTY is marked interrupted and a replacement shell starts.
+- Shared agent CLI removes three duplicated platform flows; Linux honors
+  `XDG_CONFIG_HOME`. GitHub Actions CI covers relay, Linux agent, client, and
+  platform PTY tests on macOS/Windows.
+- Local verification: relay 37 passed; agent 41 passed + 5 platform skips;
+  client 39 unit + 2 browser E2E passed; hosted control-plane 31 tests passed,
+  including all 3 Docker tenant-isolation tests; Ruff and mypy clean;
+  production client build succeeds.
+
+## relay-server/ — functional beta; v2 security cutover pending
 
 FastAPI + Redis. Envelope validation, pairing (atomic single-use tokens,
 SHA-256-hashed at rest, Lua-script CAS consumption in Redis), session
 registry, WebSocket routing, rate limiting, structured logging. Payload
 fields (`pty_data`/`pty_input`/`port_forward_data`) are never inspected —
-relay is E2E-blind by design. 31 tests, mypy/ruff clean. Dockerized.
+  relay is E2E-blind by design. 37 tests, mypy/ruff clean. Dockerized.
 
 ## agent/ — done (Linux reference + macOS/Windows built, unverified on real HW)
 
@@ -57,7 +92,7 @@ relay is E2E-blind by design. 31 tests, mypy/ruff clean. Dockerized.
   whether the scheduled task actually registers/fires/restarts.
 - Self-hosting a relay from any platform already works via the existing
   `--relay <url>` CLI flag — no additional work needed.
-- 39 tests total (34 passed + 5 skipped-on-Linux-by-design for Windows).
+- 46 tests total (41 passed + 5 skipped-on-Linux-by-design for Windows).
   ruff/mypy clean across the whole `agent/` tree. Committed
   (`4b256de`, "Build macOS and Windows agents").
 
@@ -65,7 +100,8 @@ relay is E2E-blind by design. 31 tests, mypy/ruff clean. Dockerized.
 
 React PWA, screens matching `GUI_SPEC.md`. `useTerminalSession` wired to
 a real `RelayClient` (WebSocket + the same E2E crypto as the agent).
-xterm.js terminal with `FitAddon`, `copyOnSelect: true`. 29 tests.
+xterm.js terminal with `FitAddon`, `copyOnSelect: true`. 37 unit tests plus
+2 Playwright E2E tests (real relay/agent PTY and desktop viewport coverage).
 
 Real bugs found via the user's own live testing on `client.42oclock.com`
 and fixed:
@@ -95,13 +131,10 @@ level, cross-tenant pairing token rejected). Deployed live at
 
 ## Known gaps / explicitly deferred
 
-- No persisted long-term device key — every agent restart re-pairs from
-  scratch on all three platforms.
 - Single PTY session per agent — no multi-session, idle-detection, or
   port-forwarding yet (later PROJECT_PLAN.md build-order steps).
 - No compiled Windows `.exe` — PowerShell "clone + venv" install only.
-- **Not yet built**: linking `app.42oclock.com` (control-plane login/
-  dashboard) with `client.42oclock.com` (pairing/connection UI) — no way
-  yet to log in on the app and have the client save/reuse a connection
-  rather than re-pairing each time. This is the next requested piece of
-  work.
+- Hosted login restores account and relay metadata on the same browser. Device
+  credentials intentionally remain local and are not synced to a new browser;
+  future sync must be client-side encrypted so the operator cannot recover
+  terminal access.

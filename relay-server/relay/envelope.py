@@ -7,7 +7,17 @@ from pydantic import BaseModel, Field, ValidationError
 
 from relay.errors import EnvelopeInvalid, EnvelopeTooLarge, ProtocolVersionMismatch
 
-PAIRING_TYPES = {"pair_init", "pair_request", "pair_challenge", "pair_complete"}
+PAIRING_TYPES = {
+    "pair_init",
+    "pair_request",
+    "pair_challenge",
+    "pair_complete",
+    "resume_init",
+    "resume_request",
+    "resume_challenge",
+    "resume_proof",
+    "resume_complete",
+}
 SESSION_CONTROL_TYPES = {
     "session_list",
     "session_open",
@@ -15,7 +25,7 @@ SESSION_CONTROL_TYPES = {
     "session_close",
     "idle_alert",
 }
-TERMINAL_DATA_TYPES = {"pty_data", "pty_input"}
+TERMINAL_DATA_TYPES = {"pty_data", "pty_input", "device_credential"}
 PORT_FORWARD_TYPES = {"port_forward_request", "port_forward_data", "port_forward_close"}
 
 ROUTABLE_TYPES = SESSION_CONTROL_TYPES | TERMINAL_DATA_TYPES | PORT_FORWARD_TYPES
@@ -30,7 +40,9 @@ class Envelope(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-def parse_envelope(raw: bytes | str, *, max_bytes: int, expected_version: int) -> Envelope:
+def parse_envelope(
+    raw: bytes | str, *, max_bytes: int, expected_version: int
+) -> Envelope:
     """Decode and validate one wire message. Raises EnvelopeTooLarge,
     EnvelopeInvalid, or ProtocolVersionMismatch — never returns a partially
     valid envelope."""

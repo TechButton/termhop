@@ -47,7 +47,7 @@ async def relay_server_url(redislite_url):
         "PAIRING_TOKEN_TTL": "10",
         "SESSION_PENDING_TTL": "10",
         "MAX_ENVELOPE_BYTES": "262144",
-        "PROTOCOL_VERSION": "1",
+        "PROTOCOL_VERSION": "2",
         "RATE_LIMIT_IP_MAX": "1000",
         "RATE_LIMIT_IP_WINDOW_S": "60",
         "RATE_LIMIT_TOKEN_MAX": "1000",

@@ -35,6 +35,29 @@
 .btn-block { width: 100%; justify-content: flex-start; }
 .btn-block.btn-primary, .btn-block.btn-secondary { justify-content: center; }
 
+/* — public/login landing — */
+.landing-screen { overflow: auto; }
+.landing-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px clamp(18px, 5vw, 72px); border-bottom: 1px solid var(--color-divider); }
+.landing-nav-actions, .landing-cta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wordmark { color: var(--color-text); text-decoration: none; font: 700 20px var(--font-heading); letter-spacing: -.04em; }
+.landing-main { flex: 1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .7fr); align-items: center; gap: clamp(28px, 7vw, 100px); width: 100%; max-width: 1280px; margin: 0 auto; padding: clamp(48px, 9vw, 120px) clamp(18px, 7vw, 96px); }
+.landing-hero { max-width: 720px; }
+.landing-hero h1 { margin: 12px 0 20px; font-size: clamp(44px, 7vw, 92px); line-height: .94; letter-spacing: -.065em; }
+.landing-hero > p { max-width: 620px; font-size: clamp(16px, 2vw, 20px); line-height: 1.6; opacity: .72; }
+.eyebrow { color: var(--color-accent-200); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.landing-cta { margin-top: 28px; }
+.account-label { font-size: 12px; opacity: .6; }
+.landing-status { display: block; padding: 24px; line-height: 1.5; }
+.landing-status p { opacity: .62; font-size: 13px; }
+.landing-status code { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.saved-device-list { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; }
+.notice { margin-top: 16px; padding: 10px 12px; background: var(--color-surface); border-left: 3px solid var(--color-accent); font-size: 13px; }
+.notice-error { border-left-color: #e05a4e; }
+@media (max-width: 760px) {
+  .landing-main { grid-template-columns: 1fr; align-content: start; }
+  .landing-nav .btn-ghost { display: none; }
+}
+
 /* — tags — */
 .tag {
   display: inline-flex; align-items: center; gap: 4px;
@@ -120,7 +143,29 @@
 }
 
 /* — screen scaffolding shared by every screen component — */
-.screen { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.app-shell {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.screen-loading { align-items: center; justify-content: center; opacity: .65; }
 .screen-header {
   display: flex; align-items: center; gap: 10px; padding: 16px 18px;
   border-bottom: 2px solid var(--color-divider); flex: none;

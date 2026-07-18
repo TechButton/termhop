@@ -8,7 +8,14 @@ from common.pairing_link import build_pairing_uri
 
 
 def test_build_pairing_uri_round_trips():
-    uri = build_pairing_uri("wss://relay.example.com", "tok_abc123", "my-host")
+    uri = build_pairing_uri(
+        "wss://relay.example.com",
+        "tok_abc123",
+        "my-host",
+        "pair-secret",
+        "agent-pub",
+        "sess-1",
+    )
     assert uri.startswith("termhop://pair?")
 
     query = uri.split("?", 1)[1]
@@ -16,10 +23,20 @@ def test_build_pairing_uri_round_trips():
     assert params["relay"] == ["wss://relay.example.com"]
     assert params["token"] == ["tok_abc123"]
     assert params["hostname"] == ["my-host"]
+    assert params["secret"] == ["pair-secret"]
+    assert params["agent_key"] == ["agent-pub"]
+    assert params["session"] == ["sess-1"]
 
 
 def test_build_pairing_uri_percent_encodes_relay_url():
-    uri = build_pairing_uri("wss://relay.example.com:8080/x?y=1", "t", "h")
+    uri = build_pairing_uri(
+        "wss://relay.example.com:8080/x?y=1",
+        "t",
+        "h",
+        "secret",
+        "pub",
+        "sess",
+    )
     assert "wss://relay.example.com:8080/x?y=1" not in uri
     params = urllib.parse.parse_qs(uri.split("?", 1)[1])
     assert params["relay"] == ["wss://relay.example.com:8080/x?y=1"]

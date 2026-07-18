@@ -7,11 +7,21 @@ Claude Design mockup pass and eventual component build-out.
 ## Design Constraints
 
 - Mobile-first (Capacitor-wrapped), but must degrade gracefully to a plain desktop browser tab.
+- The app shell and active screen always fill the complete dynamic viewport at any window size. Desktop may use the extra space, but must not strand the app in a partial-height or half-width phone frame unless an explicit device-preview mode is being shown.
 - Terminal view is the core screen — everything else exists to get the user into or between terminal sessions fast.
 - Must show encryption/security state clearly — this is a tool people trust with shell access, the UI should never leave that ambiguous.
 - Dark theme by default (matches terminal conventions and your existing Frequency 42 LLC teal/near-black brand direction).
 
 ## Screens
+
+### 0. Public / Account Landing
+**Purpose:** Link the optional hosted account site to the terminal client while
+keeping direct self-hosted pairing available.
+- Full-viewport responsive hero matching the Modernist token system.
+- Hosted builds show Log in / Account links and account relay status.
+- Self-hosted builds (no `VITE_CONTROL_PLANE_URL`) show direct pairing only.
+- Locally saved computers appear with reconnect status. A dropped device
+  connection retries for up to one minute after a reboot.
 
 ### 1. Pairing Screen
 **Purpose:** First-run and re-pairing to a new agent.

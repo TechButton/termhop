@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 
 from relay.config import Config
 from relay.errors import RateLimited
+from relay.pairing import token_digest
 
 _IP_WINDOW_SCRIPT = """
 local key = KEYS[1]
@@ -64,11 +65,12 @@ async def check_ip_rate_limit(redis: Redis, cfg: Config, ip: str) -> None:
 
 
 async def check_token_rate_limit(redis: Redis, cfg: Config, token: str) -> None:
+    digest = token_digest(token)
     result = await redis.eval(  # type: ignore[misc]
         _TOKEN_ATTEMPT_SCRIPT,
         2,
-        f"relay:rl:token:{token}",
-        f"relay:rl:token_blocked:{token}",
+        f"relay:rl:token:{digest}",
+        f"relay:rl:token_blocked:{digest}",
         str(cfg.rate_limit_token_max),
         str(cfg.pairing_token_ttl_s),
     )

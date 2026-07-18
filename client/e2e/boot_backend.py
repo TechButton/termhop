@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def main() -> int:
         "PAIRING_TOKEN_TTL": "300",
         "SESSION_PENDING_TTL": "300",
         "MAX_ENVELOPE_BYTES": "262144",
-        "PROTOCOL_VERSION": "1",
+        "PROTOCOL_VERSION": "2",
         "RATE_LIMIT_IP_MAX": "1000",
         "RATE_LIMIT_IP_WINDOW_S": "60",
         "RATE_LIMIT_TOKEN_MAX": "1000",
@@ -69,9 +70,12 @@ def main() -> int:
         return 1
     time.sleep(0.2)
 
-    agent_env = {"PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    # Never read or overwrite the developer's real saved device credential.
+    # The browser test owns an isolated XDG config directory for its agent.
+    agent_config = tempfile.TemporaryDirectory(prefix="termhop-e2e-agent-")
+    agent_env = {"PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "XDG_CONFIG_HOME": agent_config.name}
     agent_proc = subprocess.Popen(
-        [str(AGENT_PYTHON), "-m", "linux.main", "pair", "--relay", f"ws://127.0.0.1:{relay_port}"],
+        [str(AGENT_PYTHON), "-u", "-m", "linux.main", "pair", "--relay", f"ws://127.0.0.1:{relay_port}"],
         cwd=str(AGENT_DIR),
         env=agent_env,
         stdout=subprocess.PIPE,
@@ -107,6 +111,7 @@ def main() -> int:
     finally:
         agent_proc.terminate()
         relay_proc.terminate()
+        agent_config.cleanup()
     return 0
 
 

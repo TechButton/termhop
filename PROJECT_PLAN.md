@@ -24,8 +24,8 @@ an independent, self-hosted alternative.
 ### 2.1 Relay Server
 - **Stack:** FastAPI + `websockets`, Redis for pairing-token/session state (optional at v1, useful once you add session resume across relay restarts).
 - **Responsibilities:**
-  - Issue pairing tokens (short-lived, single-use) for QR/link pairing.
-  - Broker two WebSocket connections per session: agent↔relay, relay↔client.
+  - Register and atomically consume agent-generated routing tokens for QR/link pairing; never receive the separate out-of-band pairing secret.
+  - Broker two WebSocket connections per current v2 session: agent↔relay and client↔relay, with each socket bound to one session and role.
   - **Never decrypt payloads** — see SECURITY.md. Relay only sees ciphertext + minimal routing metadata (session ID, timestamps, byte counts for idle detection).
   - Rate-limit connection attempts and pairing token use.
 - **Deployment:** Docker container behind Nginx + Let's Encrypt, same pattern as your `vault.42oclock.com` setup. Can sit behind your Pangolin tunnel or a small public VPS.
@@ -53,6 +53,9 @@ an independent, self-hosted alternative.
 
 ### 2.4 Shared Protocol
 - A short spec doc (`PROTOCOL.md`) defining the WebSocket message format (JSON envelope: `type`, `session_id`, `seq`, `payload`) so third parties could write alternative agents or clients without reading your code. Keeps the ecosystem open even if your reference implementation isn't the only one.
+- Protocol v2 authenticates the QR/link handshake against a malicious relay, derives directional traffic keys, binds encrypted metadata as AEAD associated data, and rejects replayed sequences.
+- Durable device routing is now split from fresh attachment/session keys. The
+  remaining multi-PTY work must preserve that separation (see `PROTOCOL.md`).
 
 ## 3. Build Order
 
@@ -111,4 +114,4 @@ domain check before settling on a final name avoids friction later.
 - [ ] Where the reference relay instance (if you host a public demo) will live
 - [ ] Whether session-resume state persists in Redis or just in-memory (affects relay restart behavior)
 - [ ] Push notification provider (self-hosted ntfy.sh vs. Capacitor's native push vs. web push)
-- [ ] CI setup (lint/test on PR) before accepting outside contributions
+- [x] CI setup (lint/test/build on PR, including macOS/Windows PTY jobs)

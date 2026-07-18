@@ -43,12 +43,13 @@ def test_config(redislite_url):
         pairing_token_ttl_s=2,
         session_pending_ttl_s=2,
         max_envelope_bytes=262144,
-        protocol_version=1,
+        protocol_version=2,
         rate_limit_ip_max=5,
         rate_limit_ip_window_s=2,
         rate_limit_token_max=3,
         token_min_len=8,
         token_max_len=128,
+        release="test",
     )
 
 
@@ -73,14 +74,18 @@ async def relay_server_url(test_config, redis_client, monkeypatch):
     monkeypatch.setenv("MAX_ENVELOPE_BYTES", str(test_config.max_envelope_bytes))
     monkeypatch.setenv("PROTOCOL_VERSION", str(test_config.protocol_version))
     monkeypatch.setenv("RATE_LIMIT_IP_MAX", str(test_config.rate_limit_ip_max))
-    monkeypatch.setenv("RATE_LIMIT_IP_WINDOW_S", str(test_config.rate_limit_ip_window_s))
+    monkeypatch.setenv(
+        "RATE_LIMIT_IP_WINDOW_S", str(test_config.rate_limit_ip_window_s)
+    )
     monkeypatch.setenv("RATE_LIMIT_TOKEN_MAX", str(test_config.rate_limit_token_max))
     monkeypatch.setenv("TOKEN_MIN_LEN", str(test_config.token_min_len))
     monkeypatch.setenv("TOKEN_MAX_LEN", str(test_config.token_max_len))
 
     port = _free_port()
     app = create_app()
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    config = uvicorn.Config(
+        app, host="127.0.0.1", port=port, log_level="warning", lifespan="on"
+    )
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
 

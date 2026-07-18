@@ -43,13 +43,15 @@ async def test_canary_marker_absent_from_logs_and_redis(relay_server_url, redis_
     # expected to land in Redis by design, so canarying them would be a false
     # positive for this test. Only the actual ciphertext payload below stands
     # in for genuinely sensitive content that must never be persisted/logged.
-    await agent.send("pair_init", payload={"token": token, "agent_pubkey": "AGENT_PUB", "session_id": session_id})
+    await agent.send("pair_init", payload={"token": token, "agent_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "session_id": session_id})
     await agent.recv()  # pair_init_ack
-    await client.send("pair_request", payload={"token": token, "client_pubkey": "CLIENT_PUB"})
+    await client.send(
+        "pair_request", payload={"token": token, "client_pubkey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=", "client_proof": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="}
+    )
     await client.recv()  # pair_challenge
     await agent.recv()  # pair_challenge
-    await agent.send("pair_complete", session_id=session_id)
-    await client.send("pair_complete", session_id=session_id)
+    await agent.send("pair_complete", session_id=session_id, payload={"agent_proof": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="})
+    await client.recv()  # pair_complete
 
     await agent.send("pty_data", session_id=session_id, payload={"nonce": "n", "ciphertext": CANARY})
     await client.recv()

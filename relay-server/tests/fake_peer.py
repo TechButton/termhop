@@ -21,7 +21,7 @@ class FakePeer:
     async def send(self, type_: str, *, session_id: str | None = None, payload: dict | None = None) -> None:
         self._seq += 1
         envelope = {
-            "v": 1,
+            "v": 2,
             "type": type_,
             "session_id": session_id,
             "seq": self._seq,

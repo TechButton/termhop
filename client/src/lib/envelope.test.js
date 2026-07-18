@@ -23,7 +23,7 @@ describe("envelope", () => {
   });
 
   it("defaults payload to an empty object when absent", () => {
-    const parsed = parseEnvelope(JSON.stringify({ v: 1, type: "pair_complete", session_id: "s1", seq: 1, ts: 1 }));
+    const parsed = parseEnvelope(JSON.stringify({ v: 2, type: "pair_complete", session_id: "s1", seq: 1, ts: 1 }));
     expect(parsed.payload).toEqual({});
   });
 
@@ -32,7 +32,7 @@ describe("envelope", () => {
   });
 
   it("rejects missing required fields", () => {
-    expect(() => parseEnvelope(JSON.stringify({ v: 1, type: "pair_init" }))).toThrow(EnvelopeError);
+    expect(() => parseEnvelope(JSON.stringify({ v: 2, type: "pair_init" }))).toThrow(EnvelopeError);
   });
 
   it("requires an explicit numeric seq when building", () => {

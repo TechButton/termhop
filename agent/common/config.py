@@ -24,7 +24,9 @@ def _config_dir() -> Path:
         appdata = os.environ.get("APPDATA")
         base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
         return base / "termhop"
-    return Path.home() / ".config" / "termhop"  # Linux/XDG default
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg_config_home) if xdg_config_home else Path.home() / ".config"
+    return base / "termhop"
 
 
 def _config_path() -> Path:
@@ -34,6 +36,8 @@ def _config_path() -> Path:
 @dataclass
 class AgentConfig:
     relay_url: str | None = None
+    device_id: str | None = None
+    device_secret: str | None = None
 
 
 def load_config(path: Path | None = None) -> AgentConfig:
@@ -42,7 +46,11 @@ def load_config(path: Path | None = None) -> AgentConfig:
         return AgentConfig()
     with path.open("rb") as f:
         data = tomllib.load(f)
-    return AgentConfig(relay_url=data.get("relay", {}).get("url"))
+    return AgentConfig(
+        relay_url=data.get("relay", {}).get("url"),
+        device_id=data.get("device", {}).get("id"),
+        device_secret=data.get("device", {}).get("secret"),
+    )
 
 
 def save_config(config: AgentConfig, path: Path | None = None) -> None:
@@ -52,4 +60,17 @@ def save_config(config: AgentConfig, path: Path | None = None) -> None:
     if config.relay_url:
         escaped = config.relay_url.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'url = "{escaped}"')
+    if config.device_id and config.device_secret:
+        lines.extend(
+            [
+                "",
+                "[device]",
+                f'id = "{config.device_id}"',
+                f'secret = "{config.device_secret}"',
+            ]
+        )
     path.write_text("\n".join(lines) + "\n")
+    # The durable device credential grants terminal access. Restrict it to
+    # the installing OS user even if their default umask is permissive.
+    if os.name != "nt":
+        path.chmod(0o600)

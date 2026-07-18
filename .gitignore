@@ -10,6 +10,8 @@ venv/
 node_modules/
 dist/
 .vite/
+client/test-results/
+client/playwright-report/
 
 # Env / secrets — never commit real relay URLs, tokens, or keys
 .env

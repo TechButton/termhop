@@ -38,6 +38,7 @@ class SessionSlot:
 class SessionRegistry:
     def __init__(self) -> None:
         self._sessions: dict[str, SessionSlot] = {}
+        self._devices: dict[str, str] = {}
 
     def create(self, session_id: str) -> SessionSlot:
         slot = self._sessions.setdefault(session_id, SessionSlot())
@@ -45,6 +46,9 @@ class SessionRegistry:
 
     def attach(self, session_id: str, role: Role, ws: WebSocket) -> SessionSlot:
         slot = self._sessions.setdefault(session_id, SessionSlot())
+        existing = slot.get(role)
+        if existing is not None and existing is not ws:
+            raise ValueError(f"{role} is already attached to session {session_id}")
         slot.set(role, ws)
         return slot
 
@@ -67,6 +71,18 @@ class SessionRegistry:
 
     def remove(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+        for device_id, routed_session in list(self._devices.items()):
+            if routed_session == session_id:
+                del self._devices[device_id]
+
+    def register_device(self, device_id: str, session_id: str) -> None:
+        existing = self._devices.get(device_id)
+        if existing is not None and existing != session_id:
+            raise ValueError(f"device {device_id} is already connected")
+        self._devices[device_id] = session_id
+
+    def session_for_device(self, device_id: str) -> str | None:
+        return self._devices.get(device_id)
 
     def __len__(self) -> int:
         return len(self._sessions)

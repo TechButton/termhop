@@ -43,6 +43,16 @@ async def _ws_loop(websocket: WebSocket, role: Role) -> None:
                 log_event("envelope_rejected", session_id=ctx.session_id, peer_ip=ctx.peer_ip, error=str(exc))
                 await websocket.close(code=_POLICY_VIOLATION, reason=str(exc)[:120])
                 return
+            if envelope.seq <= ctx.last_seq:
+                log_event(
+                    "sequence_rejected",
+                    session_id=ctx.session_id,
+                    peer_ip=ctx.peer_ip,
+                    error=f"non-monotonic seq {envelope.seq}",
+                )
+                await websocket.close(code=_POLICY_VIOLATION, reason="sequence numbers must increase")
+                return
+            ctx.last_seq = envelope.seq
             await dispatch(ctx, envelope)
     except WebSocketDisconnect:
         pass

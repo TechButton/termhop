@@ -18,10 +18,17 @@ async def test_end_to_end_pty_round_trip(relay_server_url):
     await agent.connect()
     token, _ = await agent.send_pair_init()
     await agent.await_pair_init_ack()
+    assert agent.pairing_secret is not None
+    assert agent.agent_pubkey_b64 is not None
 
     client = await FakeClientPeer.connect(relay_server_url)
-    await client.pair_request_and_complete(token)
+    client_pair = asyncio.create_task(
+        client.pair_request_and_complete(
+            token, agent.pairing_secret, agent.agent_pubkey_b64, agent.session_id
+        )
+    )
     await agent.await_pair_challenge_and_complete()
+    await client_pair
 
     backend = PtyLinuxBackend()
     backend.spawn(["cat"])  # echoes back whatever it's fed

@@ -123,3 +123,17 @@ termhop-agent update                            # agent, each platform
 
 Pin versions in production if you're not ready to track `main` — releases will
 be tagged once the project reaches a stable v1.
+# Optional hosted-account client build
+
+The open-source client has no hosted dependency by default. Operators who run
+an account/control-plane site opt in at build time:
+
+```bash
+cd client
+VITE_CONTROL_PLANE_URL=https://accounts.example.com npm run build
+```
+
+Frequency 42's hosted build uses `https://app.42oclock.com`; a self-hosted
+build leaves the variable empty and exposes direct relay pairing only. This is
+a Vite build-time value, so changing it requires rebuilding static assets but
+does not require changing the relay or agent.

@@ -17,7 +17,7 @@ async def test_oversized_envelope_closes_connection(relay_server_url, test_confi
     agent = await FakePeer.connect(relay_server_url, "agent")
     oversized_payload = "x" * (test_config.max_envelope_bytes + 1000)
     raw = json.dumps(
-        {"v": 1, "type": "pair_init", "session_id": None, "seq": 1, "ts": 1, "payload": {"blob": oversized_payload}}
+        {"v": 2, "type": "pair_init", "session_id": None, "seq": 1, "ts": 1, "payload": {"blob": oversized_payload}}
     )
     await agent.send_raw(raw)
     with pytest.raises(websockets.exceptions.ConnectionClosed):
@@ -35,7 +35,7 @@ async def test_malformed_json_closes_connection(relay_server_url):
 
 async def test_missing_required_field_closes_connection(relay_server_url):
     agent = await FakePeer.connect(relay_server_url, "agent")
-    raw = json.dumps({"v": 1, "type": "pair_init"})  # missing seq/ts
+    raw = json.dumps({"v": 2, "type": "pair_init"})  # missing seq/ts
     await agent.send_raw(raw)
     with pytest.raises(websockets.exceptions.ConnectionClosed):
         await agent.recv()
@@ -49,3 +49,19 @@ async def test_version_mismatch_closes_connection(relay_server_url):
     with pytest.raises(websockets.exceptions.ConnectionClosed):
         await client.recv()
     assert client._ws.close_code == _POLICY_VIOLATION
+
+
+async def test_replayed_sequence_closes_connection(relay_server_url):
+    agent = await FakePeer.connect(relay_server_url, "agent")
+    await agent.send(
+        "pair_init",
+        payload={"token": "tok_" + "r" * 16, "agent_pubkey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "session_id": "sess-seq"},
+    )
+    await agent.recv()
+    replay = json.dumps(
+        {"v": 2, "type": "session_close", "session_id": "sess-seq", "seq": 1, "ts": 1, "payload": {}}
+    )
+    await agent.send_raw(replay)
+    with pytest.raises(websockets.exceptions.ConnectionClosed):
+        await agent.recv()
+    assert agent._ws.close_code == _POLICY_VIOLATION

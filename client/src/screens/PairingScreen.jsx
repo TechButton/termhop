@@ -2,37 +2,54 @@
 import React, { useState } from 'react';
 import { RelayClient, HandshakeError } from '../lib/relayClient';
 import { decodePairingLink, PairingLinkError } from '../lib/pairingLink';
+import { saveDevice } from '../lib/savedDevices';
 
-export default function PairingScreen({ agentHostname, onPaired }) {
+export default function PairingScreen({ accountEmail, onPaired }) {
   const [tab, setTab] = useState('qr'); // 'qr' | 'link'
   const [link, setLink] = useState('');
   // status: idle -> connecting -> handshaking -> paired | failed
   const [status, setStatus] = useState('idle');
   const [failureReason, setFailureReason] = useState('');
-  const [hostname, setHostname] = useState(agentHostname);
+  const [hostname, setHostname] = useState('the selected computer');
+  const [reviewedLink, setReviewedLink] = useState(null);
 
-  async function startPair() {
+  function reviewPair() {
     let parsed;
     try {
       parsed = decodePairingLink(link);
     } catch (err) {
       setFailureReason(err instanceof PairingLinkError ? err.message : 'invalid pairing link');
       setStatus('failed');
-      return;
+      return false;
     }
     if (parsed.hostname) setHostname(parsed.hostname);
+    setReviewedLink(parsed);
+    setStatus('review');
+    return true;
+  }
 
+  async function startPair() {
+    const parsed = reviewedLink;
+    if (!parsed) return;
     const client = new RelayClient(parsed.relayUrl);
+    setLink('');
     setStatus('connecting');
     try {
       await client.connect();
       setStatus('handshaking');
-      await client.sendPairRequest(parsed.token);
-      const { sessionId, agentHostname: challengeHostname } = await client.awaitPairChallengeAndDeriveKey();
+      await client.sendPairRequest(parsed);
+      const { sessionId, agentHostname: challengeHostname, fingerprint } = await client.awaitPairChallengeAndComplete();
+      const credential = await client.awaitDeviceCredential();
       if (challengeHostname) setHostname(challengeHostname);
-      client.sendPairComplete();
       setStatus('paired');
-      onPaired?.({ client, sessionId, agentHostname: challengeHostname || parsed.hostname });
+      const savedDevice = {
+        ...credential,
+        relayUrl: parsed.relayUrl,
+        hostname: challengeHostname || parsed.hostname || 'Unnamed computer',
+        accountEmail: accountEmail || null,
+      };
+      saveDevice(savedDevice);
+      onPaired?.({ client, sessionId, agentHostname: challengeHostname || parsed.hostname, fingerprint, device: savedDevice });
     } catch (err) {
       setFailureReason(err instanceof HandshakeError ? err.message : 'connection failed');
       setStatus('failed');
@@ -100,6 +117,7 @@ export default function PairingScreen({ agentHostname, onPaired }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
         {status === 'idle' && <span style={{ opacity: .6 }}>Idle</span>}
+        {status === 'review' && <span>Ready for your confirmation</span>}
         {status === 'connecting' && <span>Connecting…</span>}
         {status === 'handshaking' && <span>Handshaking… (ECDH)</span>}
         {status === 'paired' && <span style={{ color: 'var(--color-accent)' }}>Paired ✓</span>}
@@ -109,12 +127,18 @@ export default function PairingScreen({ agentHostname, onPaired }) {
       <div style={{ flex: 1 }} />
 
       {status === 'failed' && (
-        <button className="btn btn-primary btn-block" onClick={() => setStatus('idle')}>Try again</button>
+        <button className="btn btn-primary btn-block" onClick={() => { setStatus('idle'); setReviewedLink(null); }}>Try again</button>
       )}
       {status === 'idle' && (
-        <button className="btn btn-primary btn-block" onClick={startPair} disabled={tab === 'link' && !link}>
-          Pair device
+        <button className="btn btn-primary btn-block" onClick={reviewPair} disabled={tab !== 'link' || !link}>
+          Review pairing
         </button>
+      )}
+      {status === 'review' && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => { setStatus('idle'); setReviewedLink(null); }}>Back</button>
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={startPair}>Pair {hostname}</button>
+        </div>
       )}
     </div>
   );

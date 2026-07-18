@@ -27,8 +27,9 @@ and [`SECURITY.md`](./SECURITY.md) for the threat model and encryption design.
 
 ## Status
 
-Early planning / pre-implementation. See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md)
-section 7 for open decisions still being made before the first commit.
+Protocol v2 pairing, the relay, cross-platform agent code, browser terminal,
+saved-device reboot reconnection, tests, and CI are implemented locally. See
+[`PROGRESS.md`](./PROGRESS.md) for the exact verified/deployed distinction.
 
 ## Repo Layout
 
@@ -50,7 +51,7 @@ termhop/
 └── docker-compose.yml
 ```
 
-## Quickstart (target — not yet implemented)
+## Quickstart
 
 ```bash
 # 1. Stand up the relay (self-hosted, behind your own domain/tunnel)
@@ -74,7 +75,9 @@ See [`LICENSE`](./LICENSE) and the licensing section in [`PROJECT_PLAN.md`](./PR
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) and the annotated module map in
+[`CODE_GUIDE.md`](./CODE_GUIDE.md). Hosted accounts are optional; the boundary
+is documented in [`HOSTED_SERVICE.md`](./HOSTED_SERVICE.md).
 
 ## Security
 

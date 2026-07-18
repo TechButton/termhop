@@ -45,19 +45,32 @@ test.afterAll(() => {
 
 test('pairs against a real relay+agent and echoes a real command', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: 'Pair your relay' }).click();
 
-  await page.getByLabel('Paste link').check();
+  // The segmented control deliberately hides the native radio and makes the
+  // visible label the hit target.
+  await page.locator('label.seg-opt', { hasText: 'Paste link' }).click();
   await page.getByPlaceholder(/termhop:\/\/pair/).fill(pairingLink);
-  await page.getByRole('button', { name: 'Pair device' }).click();
+  await page.getByRole('button', { name: 'Review pairing' }).click();
+  await page.getByRole('button', { name: /Pair / }).click();
 
-  await expect(page.getByText('Paired ✓')).toBeVisible({ timeout: 10000 });
-
-  // Real xterm.js terminal should now be mounted and streaming.
-  const terminal = page.locator('.xterm-screen, .xterm');
-  await expect(terminal).toBeVisible({ timeout: 5000 });
+  // Successful pairing immediately routes to Screen 4, so the transient
+  // "Paired" status unmounts; the real terminal is the stable success state.
+  const terminal = page.locator('.xterm');
+  await expect(terminal).toBeVisible({ timeout: 10000 });
 
   await page.getByPlaceholder('Type a command…').fill('echo PLAYWRIGHT_E2E_CANARY');
   await page.getByPlaceholder('Type a command…').press('Enter');
 
-  await expect(page.locator('.xterm-rows, .xterm')).toContainText('PLAYWRIGHT_E2E_CANARY', { timeout: 10000 });
+  await expect(terminal).toContainText('PLAYWRIGHT_E2E_CANARY', { timeout: 10000 });
+});
+
+test('fills the complete desktop viewport without changing the mobile-first screen structure', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const shell = page.locator('.app-shell');
+  await expect(shell).toBeVisible();
+  const bounds = await shell.boundingBox();
+  expect(bounds.width).toBe(1440);
+  expect(bounds.height).toBe(900);
 });

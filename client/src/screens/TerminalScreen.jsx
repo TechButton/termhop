@@ -38,7 +38,7 @@ const COMPACT_KEYS = [
 // PairingScreen already connected and paired — this must be the SAME
 // connection, not a new one (the relay ties a session to one live
 // WebSocket; reconnecting means re-pairing from scratch, not resuming).
-function useTerminalSession(containerRef, relayClient) {
+function useTerminalSession(containerRef, relayClient, onDisconnectedRef) {
   useEffect(() => {
     if (!containerRef.current || !relayClient) return undefined;
 
@@ -76,16 +76,29 @@ function useTerminalSession(containerRef, relayClient) {
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(containerRef.current);
-    fitAddon.fit();
-
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
-    resizeObserver.observe(containerRef.current);
 
     relayClient.beginStreaming({
       onEncrypted: (plaintext) => term.write(new TextDecoder().decode(plaintext)),
-      onSessionClose: () => term.write('\r\n\x1b[2m[session closed]\x1b[0m\r\n'),
+      onSessionClose: (payload) => {
+        term.write('\r\n\x1b[2m[session closed]\x1b[0m\r\n');
+        if (payload?.reason === 'peer_disconnected') onDisconnectedRef.current?.();
+      },
       onError: (payload) => term.write(`\r\n\x1b[2m[relay error: ${payload?.message ?? 'unknown'}]\x1b[0m\r\n`),
+      onDisconnected: () => onDisconnectedRef.current?.(),
     });
+
+    let resizeFrame = 0;
+    const fitAndSync = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        fitAddon.fit();
+        relayClient.sendSessionResize(term.rows, term.cols);
+      });
+    };
+    fitAndSync();
+
+    const resizeObserver = new ResizeObserver(fitAndSync);
+    resizeObserver.observe(containerRef.current);
 
     const inputListener = term.onData((input) => {
       relayClient.sendEncrypted('pty_input', new TextEncoder().encode(input));
@@ -93,18 +106,21 @@ function useTerminalSession(containerRef, relayClient) {
 
     return () => {
       resizeObserver.disconnect();
+      cancelAnimationFrame(resizeFrame);
       inputListener.dispose();
       term.dispose();
       // Deliberately NOT closing relayClient here — closing the one shared
       // WebSocket on unmount would kill the session; that only happens from
       // an explicit disconnect/unpair action.
     };
-  }, [containerRef, relayClient]);
+  }, [containerRef, relayClient, onDisconnectedRef]);
 }
 
-export default function TerminalScreen({ session, relayClient, onBack, onOpenEncryptionInfo }) {
+export default function TerminalScreen({ session, relayClient, onBack, onDisconnected, onOpenEncryptionInfo }) {
   const containerRef = useRef(null);
-  useTerminalSession(containerRef, relayClient);
+  const onDisconnectedRef = useRef(onDisconnected);
+  onDisconnectedRef.current = onDisconnected;
+  useTerminalSession(containerRef, relayClient, onDisconnectedRef);
 
   const [ctrlArmed, setCtrlArmed] = useState(false);
 
@@ -129,7 +145,7 @@ export default function TerminalScreen({ session, relayClient, onBack, onOpenEnc
   const [permStatus, setPermStatus] = useState('approved');
 
   return (
-    <div className="screen" style={{ position: 'relative' }}>
+    <div className="screen" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '2px solid var(--color-divider)' }}>
         <button className="btn btn-icon" onClick={onBack} aria-label="Back"><BackIcon /></button>
         <div style={{ flex: 1, minWidth: 0 }}>

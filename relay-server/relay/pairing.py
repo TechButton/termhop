@@ -9,6 +9,7 @@
 # brute-force window past the token's TTL.
 import re
 import time
+import hashlib
 
 from redis.asyncio import Redis
 
@@ -43,12 +44,20 @@ return {'ok', unpack(vals)}
 
 
 def validate_token_format(token: str, cfg: Config) -> None:
-    if not (cfg.token_min_len <= len(token) <= cfg.token_max_len) or not _TOKEN_RE.match(token):
-        raise TokenInvalid(f"token must be {cfg.token_min_len}-{cfg.token_max_len} url-safe chars")
+    if not (
+        cfg.token_min_len <= len(token) <= cfg.token_max_len
+    ) or not _TOKEN_RE.match(token):
+        raise TokenInvalid(
+            f"token must be {cfg.token_min_len}-{cfg.token_max_len} url-safe chars"
+        )
+
+
+def token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
 
 
 def _token_key(token: str) -> str:
-    return f"relay:token:{token}"
+    return f"relay:token:{token_digest(token)}"
 
 
 def _session_key(session_id: str) -> str:
@@ -93,9 +102,19 @@ async def consume_token(redis: Redis, token: str) -> dict[str, str]:
     return dict(zip(fields[0::2], fields[1::2]))
 
 
+async def delete_token(redis: Redis, token: str) -> None:
+    await redis.delete(_token_key(token))
+
+
 async def create_session_record(redis: Redis, cfg: Config, session_id: str) -> None:
     key = _session_key(session_id)
-    await redis.hset(key, mapping={"state": "awaiting_client", "created_at": str(int(time.time() * 1000))})  # type: ignore[misc]
+    await redis.hset(
+        key,
+        mapping={
+            "state": "awaiting_client",
+            "created_at": str(int(time.time() * 1000)),
+        },
+    )  # type: ignore[misc]
     await redis.expire(key, cfg.session_pending_ttl_s)  # type: ignore[misc]
 
 

@@ -4,7 +4,7 @@ import asyncio
 import pytest
 
 from relay.errors import TokenAlreadyUsed, TokenInvalid, TokenNotFound
-from relay.pairing import consume_token, issue_token, validate_token_format
+from relay.pairing import consume_token, issue_token, token_digest, validate_token_format
 
 @pytest.mark.asyncio
 async def test_issue_then_consume_succeeds(redis_client, test_config):
@@ -15,6 +15,15 @@ async def test_issue_then_consume_succeeds(redis_client, test_config):
     assert fields["agent_pubkey"] == "PUBKEY"
     assert fields["session_id"] == "sess1"
     assert fields["state"] == "consumed"
+
+
+@pytest.mark.asyncio
+async def test_raw_token_never_appears_in_redis_keys(redis_client, test_config):
+    token = "tok_" + "q" * 16
+    await issue_token(redis_client, test_config, token=token, agent_pubkey="PUB", session_id="sess-hashed")
+    keys = [key async for key in redis_client.scan_iter("*")]
+    assert all(token not in key for key in keys)
+    assert any(token_digest(token) in key for key in keys)
 
 
 @pytest.mark.asyncio

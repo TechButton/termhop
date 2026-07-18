@@ -17,7 +17,7 @@ All messages are JSON objects with this shape:
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "type": "string",
   "session_id": "string | null",
   "seq": 0,
@@ -31,7 +31,7 @@ All messages are JSON objects with this shape:
 | `v` | int | Protocol version, for future compatibility. |
 | `type` | string | Message type — see table below. |
 | `session_id` | string \| null | Null only for pre-pairing handshake messages. |
-| `seq` | int | Monotonically increasing per-connection sequence number, used for ordering and idle-detection timing. |
+| `seq` | int | Strictly increasing per sender connection. The relay rejects duplicates/regressions; endpoints additionally reject replayed encrypted messages. |
 | `ts` | int | Unix ms timestamp, set by sender. |
 | `payload` | object | Type-specific. For encrypted types, this is `{ "nonce": "...", "ciphertext": "..." }` — the relay never inspects inside it. |
 
@@ -43,16 +43,27 @@ All messages are JSON objects with this shape:
 |---|---|---|
 | `pair_init` | agent → relay | Register a new pairing token + agent's ephemeral public key. |
 | `pair_init_ack` | relay → agent | Confirms the relay has registered the pairing token. The agent must wait for this before displaying the QR/pairing link — otherwise a fast client `pair_request` can race ahead of the relay's own bookkeeping. |
-| `pair_request` | client → relay | Client presents scanned/pasted pairing token. |
-| `pair_challenge` | relay → both | Relay forwards each side's ephemeral public key to the other (opaque blob, relay doesn't generate or read key material). |
-| `pair_complete` | agent/client → relay | Confirms handshake done; relay marks token consumed and invalid for reuse. |
+| `pair_request` | client → relay | Client presents the routing token, its ephemeral public key, and an out-of-band-secret-backed proof. |
+| `pair_challenge` | relay → both | Relay forwards pinned public keys and the opaque client proof. |
+| `pair_complete` | agent → relay → client | Agent confirms the client proof and returns its own proof; the client must validate it before streaming. |
+| `resume_init` | agent → relay | Rebooted agent advertises a random device ID, new session ID, and fresh ephemeral key. |
+| `resume_request` | client → relay → agent | Browser asks to reconnect a locally saved device ID. |
+| `resume_challenge` | agent → relay → client | Agent supplies its fresh ephemeral key and hostname. |
+| `resume_proof` | client → relay → agent | Client supplies its fresh key and durable-secret-backed proof. |
+| `resume_complete` | agent → relay → client | Agent returns its proof; streaming begins only after client verification. |
+| `device_credential` | agent → relay → client | First-pair-only encrypted delivery of the durable device ID/secret. Relay sees ciphertext only. |
 | `error` | relay → either | Generic error response, `payload = {code, message}`. Sent for rejected pairing/rate-limit/protocol-validation failures; the connection is closed afterward for validation failures (oversized/malformed/version-mismatched envelopes), left open for recoverable ones (e.g. `token_invalid`). |
 
-**Token and session-id ownership** — the relay never generates either:
-- The relay never generates the pairing token (see SECURITY.md: "PC agent generates a single-use pairing token"). The agent generates it and sends it in `pair_init.payload.token`; the relay only validates format and atomically enforces single-use.
-- The agent also generates the `session_id` itself and sends it in `pair_init.payload.session_id` — envelope-level `session_id` stays `null` for `pair_init`/`pair_request` (both are pre-pairing). The relay learns the session_id from the token record and includes it at the envelope level starting with `pair_challenge`, so the client learns it there and both sides address every later message by it.
-- `pair_init.payload` = `{token, agent_pubkey, session_id, agent_hostname}`. `pair_request.payload` = `{token, client_pubkey}` — the relay forwards `client_pubkey` to the agent via `pair_challenge` and vice versa, so `pair_request` must carry the client's own ephemeral pubkey, not just the token. `pair_challenge.payload` = `{peer_pubkey, agent_hostname}` (the *other* side's pubkey; `agent_hostname` is only meaningful on the copy sent to the client, echoing what the agent reported at `pair_init` — GUI_SPEC.md's pairing screen shows "This device will be able to run commands on `<agent hostname>`", which needs a payload field to come from).
-- Binary payload fields (`agent_pubkey`, `client_pubkey`, `peer_pubkey`, `nonce`, `ciphertext`) are standard base64-encoded ASCII strings (not urlsafe — these live inside JSON, not URLs).
+**Out-of-band pairing data and relay-visible routing data:**
+
+- The agent generates a single-use routing `token`, a separate 256-bit `pairing_secret`, an ephemeral X25519 key pair, and `session_id`.
+- The pairing URI carries `{relay, token, secret, agent_key, session, hostname}`. The secret, pinned agent key, and pinned session ID arrive at the client through the QR/pasted-link channel.
+- Only `token`, `agent_pubkey`, `session_id`, and `agent_hostname` are sent in `pair_init`. The pairing secret is never sent to or stored by the relay. Redis keys contain `SHA-256(token)`, not the raw token.
+- `pair_request.payload = {token, client_pubkey, client_proof}`. The proof authenticates the canonical transcript with a proof key derived from ECDH plus the out-of-band secret.
+- The client rejects a `pair_challenge` whose agent key or session ID differs from the pairing link. The agent rejects an invalid `client_proof`.
+- `pair_complete.payload = {agent_proof}`. The relay forwards it opaquely; the client validates it before entering the paired state.
+- Once bound, a WebSocket may only address its own `session_id`. The relay rejects cross-session envelopes and duplicate role attachments.
+- Public keys, nonces, ciphertext, and proofs use standard base64 inside JSON. The pairing secret uses unpadded URL-safe base64 in the URI.
 
 ### Session Control (relay sees these — routing only, no terminal content)
 
@@ -81,16 +92,26 @@ All messages are JSON objects with this shape:
 
 ## Encryption
 
-- Handshake: X25519 ECDH between agent and client ephemeral keys, exchanged via `pair_challenge`. Derived shared secret feeds an HKDF to produce the session key.
-- **KDF (pinned)**: HKDF-SHA256, `salt=None` (the X25519 shared secret already has full entropy; no multi-context separation need beyond `info`), `info=b"termhop-session-key-v1"` (version-tagged so a future protocol bump can derive a distinct key unambiguously), 32-byte output.
-- **Data encryption (pinned)**: XChaCha20-Poly1305, IETF construction, per-message — chosen over AES-256-GCM since this project has no stated FIPS requirement, and XChaCha20's 192-bit extended nonce removes the nonce-uniqueness footgun of AES-GCM's 96-bit nonce over a long-lived streaming PTY connection emitting many small messages. `nonce` is 24 bytes, freshly random (`os.urandom`) per message — no counter state to persist across reconnects. Ciphertext includes the Poly1305 tag (libsodium's combined-mode API); no separate tag field.
-- Long-term pairing: after first pairing, agent and client persist a long-term key pair per device so future connections skip QR re-scanning but still perform a fresh ECDH per session (forward secrecy). **Not yet implemented** — the reference Linux agent (agent/linux) only does ephemeral-per-session ECDH so far; every agent restart re-pairs from scratch until this lands.
+- **Handshake:** X25519 ECDH between ephemeral endpoint keys. HKDF-SHA256 uses the 256-bit out-of-band pairing secret as salt and `b"termhop-handshake-v2\0" || SHA-256(transcript)` as info.
+- **Canonical transcript:** `termhop-handshake-v2`, followed by newline-delimited `session_id`, routing `token`, `agent_pubkey`, and `client_pubkey` fields in that exact order. Both roles prove possession with HMAC-SHA256 over the transcript plus `role=client` or `role=agent`.
+- **Directional keys:** HKDF produces 96 bytes, split into 32-byte `agent_to_client`, `client_to_agent`, and pairing-proof keys. A ciphertext from one direction therefore cannot be reflected into the other.
+- **Data encryption:** XChaCha20-Poly1305, IETF construction, with a fresh random 24-byte nonce. Ciphertext includes the Poly1305 tag.
+- **Associated data:** encrypted messages authenticate the exact direction, `type`, `session_id`, and `seq` using the canonical `termhop-message-v2` AAD encoding. Relabeling, cross-session delivery, direction reflection, and sequence modification fail authentication.
+- **Replay handling:** relay connections require strictly increasing envelope sequence numbers. Endpoints track the last successfully authenticated encrypted sequence and reject duplicates or regressions even when the relay is considered malicious.
+- Durable pairing: after initial pairing is mutually authenticated, the agent
+  sends a separately generated random 256-bit device secret in an encrypted
+  `device_credential` message. Both endpoints then persist it locally; it is
+  never part of the pairing link.
+  Reconnection performs fresh X25519 ECDH and uses that durable secret as the
+  HKDF salt for role-bound proofs, retaining fresh traffic keys and forward
+  secrecy. The relay sees only the random device routing ID and public data.
+  The hosted account service never receives the durable secret.
 
 Full rationale and threat model: see [`SECURITY.md`](./SECURITY.md).
 
 ## Versioning
 
-- Envelope carries `v`. Relay and both endpoints should reject/negotiate down on mismatch rather than silently misparse.
+- Envelope carries `v`. Protocol v2 endpoints reject mismatches rather than silently misparse; there is no automatic downgrade to v1.
 - Breaking protocol changes bump `v`; additive fields (new optional keys) do not require a version bump.
 
 ## Message Size
@@ -105,6 +126,15 @@ enforces the per-message ceiling.
 
 ## Open Questions (track in repo issues once public)
 
-- [x] Exact HKDF parameters and cipher suite — pinned above (HKDF-SHA256/XChaCha20-Poly1305), implemented in `agent/common/crypto.py`.
+- [x] Exact authenticated handshake, directional HKDF parameters, AEAD associated data, and cipher suite — pinned above and covered by cross-language vectors.
 - [ ] Concrete chunk size and reassembly-hint fields for large PTY output bursts (relay-side cap is now fixed at 256 KiB; the sender-side chunking scheme itself is still open — the reference agent doesn't chunk yet, since a single PTY read is well under the cap in practice, but nothing enforces that for large output bursts).
 - [ ] Whether `session_list` metadata (cwd, cmd) should be encrypted too, given it can leak project names/paths to the relay. Current draft leaves it plaintext for UI convenience — worth revisiting.
+- [ ] Before port forwarding is enabled, encrypt or authenticate its control messages as well as its byte stream; a malicious relay must not be able to request access to an arbitrary local port.
+
+## Device and Session Architecture (next protocol phase)
+
+Protocol v2 now has a durable device identity distinct from the fresh routing
+session created for every attachment. The current agent still owns one PTY at a
+time. A client disconnect or reboot can reconnect the device, but an OS reboot
+necessarily destroys the PTY and starts a replacement shell. Multi-PTY session
+IDs and resumable application-specific commands remain the next protocol phase.

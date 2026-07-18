@@ -1,27 +1,27 @@
 # relay-server
 
 FastAPI + WebSockets relay implementing the pairing and routing message
-types from `../PROTOCOL.md`. Status: v1 built — pairing handshake routing,
+types from `../PROTOCOL.md`. Status: protocol v2 built locally — authenticated pairing routing,
 session-control routing, terminal-data routing, port-forward routing,
 per-IP/per-token rate limiting, and payload-blind logging are all
-implemented and tested. Not yet exercised against a real agent or client
-(neither exists yet — see `../PROJECT_PLAN.md` build order); tested against
-a fake-peer WebSocket harness that stands in for both.
+implemented and tested against both fake peers and the real agent/client
+handshake implementations.
 
 ## Scope
 
 - Never decrypts `pty_data`/`pty_input`/`port_forward_data` payloads — see
   `../SECURITY.md`. The router (`relay/router.py`) forwards every routable
-  envelope verbatim by `session_id`, without ever inspecting `payload`
-  contents.
+  envelope verbatim only within the WebSocket's bound `session_id`, without
+  inspecting encrypted payload contents.
 - Redis (via `relay/pairing.py`) holds pairing-token state and short-lived
   session records; the live WebSocket objects themselves are only ever
   in-process (`relay/session_registry.py`) — a relay restart requires
-  re-pairing, by design (no cross-restart session resume in v1).
+  re-pairing, by design (no cross-restart session resume yet).
 - Two small protocol clarifications beyond the original `PROTOCOL.md` draft
   were needed to make this concrete — see that doc's updated Pairing section:
-  the agent generates both the pairing token and the `session_id`, and two
-  new message types (`pair_init_ack`, `error`) were added to the vocabulary.
+  the agent generates the routing token, out-of-band pairing secret, keypair,
+  and `session_id`. The secret never reaches this service; token-bearing Redis
+  keys use SHA-256 digests.
 
 ## Running locally
 

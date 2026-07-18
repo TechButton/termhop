@@ -10,7 +10,7 @@ export function buildEnvelope(type, { sessionId = null, seq, payload = {} } = {}
     throw new EnvelopeError("buildEnvelope requires a numeric seq");
   }
   return {
-    v: 1,
+    v: 2,
     type,
     session_id: sessionId,
     seq,
