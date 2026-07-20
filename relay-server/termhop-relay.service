@@ -1,0 +1,39 @@
+[Unit]
+Description=TermHop encrypted terminal relay
+Documentation=https://github.com/TechButton/termhop/blob/main/docs/RELAY_DEPLOYMENT.md
+After=network-online.target redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=termhop-relay
+Group=termhop-relay
+WorkingDirectory=/opt/termhop/relay-server
+EnvironmentFile=/etc/termhop/relay.env
+ExecStart=/opt/termhop/relay-server/.venv/bin/uvicorn relay.main:app --host 127.0.0.1 --port 8080 --ws-max-size 262144
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=8192
+MemoryMax=256M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

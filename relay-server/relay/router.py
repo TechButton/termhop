@@ -16,6 +16,7 @@
 import base64
 import binascii
 import re
+import time
 from dataclasses import dataclass
 
 from fastapi import WebSocket
@@ -48,10 +49,12 @@ class ConnectionContext:
     registry: SessionRegistry
     session_id: str | None = None
     last_seq: int = 0
+    handshake_deadline: float | None = None
 
 
 _SESSION_ID_RE = re.compile(r"^sess-[A-Za-z0-9_-]{1,64}$")
 _DEVICE_ID_RE = re.compile(r"^dev-[a-f0-9]{32}$")
+_MAX_HOSTNAME_CHARS = 255
 _ROLE_TYPES = {
     "agent": {
         "pair_init",
@@ -93,6 +96,14 @@ def _valid_base64_size(value: object, size: int) -> bool:
 
 def _valid_session_id(value: object) -> bool:
     return isinstance(value, str) and _SESSION_ID_RE.fullmatch(value) is not None
+
+
+def _valid_hostname(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) <= _MAX_HOSTNAME_CHARS
+        and not any(ord(character) < 32 or ord(character) == 127 for character in value)
+    )
 
 
 async def send_envelope(ws: WebSocket, envelope: Envelope) -> None:
@@ -156,11 +167,15 @@ async def handle_pair_init(ctx: ConnectionContext, envelope: Envelope) -> None:
             "agent_pubkey must be standard base64 encoding of 32 bytes",
         )
         return
+    if not _valid_hostname(agent_hostname):
+        await _send_error(ctx, "protocol_error", "agent_hostname is invalid")
+        return
 
     # Reserve the in-process route before the first await so a concurrent
     # pair_init cannot create Redis state for the same session identifier.
     try:
-        ctx.registry.attach(session_id, "agent", ctx.ws)
+        slot = ctx.registry.attach(session_id, "agent", ctx.ws)
+        slot.phase = "pairing"
     except ValueError:
         await _send_error(ctx, "session_conflict", "session_id is already connected")
         return
@@ -237,6 +252,7 @@ async def handle_pair_request(ctx: ConnectionContext, envelope: Envelope) -> Non
         )
         return
 
+    validate_token_format(token, ctx.cfg)
     await check_ip_rate_limit(ctx.redis, ctx.cfg, ctx.peer_ip)
     await check_token_rate_limit(ctx.redis, ctx.cfg, token)
 
@@ -260,6 +276,7 @@ async def handle_pair_request(ctx: ConnectionContext, envelope: Envelope) -> Non
         )
         return
     ctx.session_id = session_id
+    ctx.handshake_deadline = time.monotonic() + ctx.cfg.handshake_timeout_s
     await set_session_state(ctx.redis, session_id, "handshaking")
 
     await send_envelope(
@@ -320,6 +337,9 @@ async def handle_pair_complete(ctx: ConnectionContext, envelope: Envelope) -> No
     if peer_ws is None:
         await _send_error(ctx, "session_not_found", "peer is not connected")
         return
+    slot = ctx.registry.get(ctx.session_id)
+    if slot is not None:
+        slot.phase = "established"
     await send_envelope(peer_ws, envelope)
     await mark_session_established(ctx.redis, ctx.session_id)
     log_event(
@@ -340,7 +360,12 @@ async def handle_resume_init(ctx: ConnectionContext, envelope: Envelope) -> None
     session_id = envelope.payload.get("session_id", "")
     device_id = envelope.payload.get("device_id", "")
     agent_pubkey = envelope.payload.get("agent_pubkey", "")
-    if not _valid_session_id(session_id) or not _DEVICE_ID_RE.fullmatch(device_id):
+    agent_hostname = envelope.payload.get("agent_hostname", "")
+    if (
+        not _valid_session_id(session_id)
+        or not isinstance(device_id, str)
+        or not _DEVICE_ID_RE.fullmatch(device_id)
+    ):
         await _send_error(
             ctx, "protocol_error", "invalid resume session_id or device_id"
         )
@@ -350,8 +375,12 @@ async def handle_resume_init(ctx: ConnectionContext, envelope: Envelope) -> None
             ctx, "protocol_error", "agent_pubkey must encode exactly 32 bytes"
         )
         return
+    if not _valid_hostname(agent_hostname):
+        await _send_error(ctx, "protocol_error", "agent_hostname is invalid")
+        return
     try:
-        ctx.registry.attach(session_id, "agent", ctx.ws)
+        slot = ctx.registry.attach(session_id, "agent", ctx.ws)
+        slot.phase = "waiting_resume"
         ctx.registry.register_device(device_id, session_id)
     except ValueError:
         ctx.registry.detach(session_id, "agent")
@@ -381,6 +410,11 @@ async def handle_resume_request(ctx: ConnectionContext, envelope: Envelope) -> N
         )
         return
     device_id = envelope.payload.get("device_id", "")
+    if not isinstance(device_id, str) or not _DEVICE_ID_RE.fullmatch(device_id):
+        await _send_error(ctx, "protocol_error", "invalid device_id")
+        return
+    await check_ip_rate_limit(ctx.redis, ctx.cfg, ctx.peer_ip)
+    await check_token_rate_limit(ctx.redis, ctx.cfg, f"resume-{device_id}")
     session_id = ctx.registry.session_for_device(device_id)
     slot = ctx.registry.get(session_id) if session_id else None
     if session_id is None or slot is None or slot.agent is None:
@@ -396,6 +430,8 @@ async def handle_resume_request(ctx: ConnectionContext, envelope: Envelope) -> N
         )
         return
     ctx.session_id = session_id
+    ctx.handshake_deadline = time.monotonic() + ctx.cfg.handshake_timeout_s
+    slot.phase = "resuming"
     # The relay forwards the agent's fresh public metadata; the following
     # endpoint proofs detect any malicious substitution.
     agent_slot = slot.agent
@@ -472,6 +508,9 @@ async def handle_resume_complete(ctx: ConnectionContext, envelope: Envelope) -> 
     if peer is None:
         await _send_error(ctx, "session_not_found", "client disconnected")
         return
+    slot = ctx.registry.get(ctx.session_id)
+    if slot is not None:
+        slot.phase = "established"
     await send_envelope(peer, envelope)
 
 
@@ -487,6 +526,13 @@ async def handle_routable(ctx: ConnectionContext, envelope: Envelope) -> None:
         )
         return
     session_id = ctx.session_id
+
+    slot = ctx.registry.get(session_id)
+    if slot is None or slot.phase != "established":
+        await _send_error(
+            ctx, "handshake_incomplete", "session traffic requires authentication"
+        )
+        return
 
     peer_ws = ctx.registry.get_peer(session_id, ctx.role)
     if peer_ws is None:

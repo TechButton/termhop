@@ -13,6 +13,7 @@ from common import crypto, pairing
 from common.envelope import Envelope, EnvelopeError, dump_envelope, parse_envelope
 
 PROTOCOL_VERSION = 2
+MAX_ENVELOPE_BYTES = 262144
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -39,6 +40,13 @@ class RelayClient:
         parsed_url = urllib.parse.urlparse(relay_url)
         if parsed_url.scheme not in {"ws", "wss"} or not parsed_url.hostname:
             raise HandshakeError("relay URL must use ws:// or wss://")
+        if (
+            parsed_url.username is not None
+            or parsed_url.password is not None
+            or parsed_url.query
+            or parsed_url.fragment
+        ):
+            raise HandshakeError("relay URL must not contain credentials, query, or fragment")
         if parsed_url.scheme == "ws" and parsed_url.hostname not in _LOOPBACK_HOSTS:
             raise HandshakeError(
                 "plaintext ws:// is allowed only for loopback development"
@@ -60,7 +68,14 @@ class RelayClient:
 
     async def connect(self) -> None:
         self.state = HandshakeState.CONNECTING
-        self._ws = await websockets.connect(f"{self._relay_url}/ws/agent")
+        self._ws = await websockets.connect(
+            f"{self._relay_url}/ws/agent",
+            max_size=MAX_ENVELOPE_BYTES,
+            open_timeout=10,
+            ping_interval=20,
+            ping_timeout=20,
+            close_timeout=5,
+        )
 
     def _next_seq(self) -> int:
         self._seq += 1

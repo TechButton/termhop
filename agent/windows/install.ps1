@@ -43,10 +43,12 @@ $WatcherProcesses = @($TermhopProcesses | Where-Object {
     $_.CommandLine.IndexOf($WatchPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
 })
 $AgentProcesses = @($TermhopProcesses | Where-Object {
-    $_.ExecutablePath -and
-    $_.ExecutablePath.Equals($AgentPython, [StringComparison]::OrdinalIgnoreCase) -and
     $_.CommandLine -and
-    $_.CommandLine.IndexOf("-m windows.main", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    $_.CommandLine.IndexOf("-m windows.main", [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+    (
+        $_.CommandLine.IndexOf($AgentPython, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+        $_.CommandLine.IndexOf("$InstallDir\agent", [StringComparison]::OrdinalIgnoreCase) -ge 0
+    )
 })
 $RestartBackgroundAfterUpdate = $WatcherProcesses.Count -gt 0
 if ($WatcherProcesses.Count -gt 0 -or $AgentProcesses.Count -gt 0) {
@@ -57,7 +59,19 @@ if ($WatcherProcesses.Count -gt 0 -or $AgentProcesses.Count -gt 0) {
     $AgentProcesses | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 500
+    # A venv executable cannot be replaced while any matching Windows process
+    # still has it mapped. Wait for termination instead of relying on a fixed
+    # delay, which was racy on slower machines and caused Errno 13 from pip.
+    $StoppedIds = @($WatcherProcesses.ProcessId) + @($AgentProcesses.ProcessId)
+    foreach ($ProcessId in $StoppedIds) {
+        $Deadline = [DateTime]::UtcNow.AddSeconds(10)
+        while (
+            (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) -and
+            [DateTime]::UtcNow -lt $Deadline
+        ) {
+            Start-Sleep -Milliseconds 100
+        }
+    }
 }
 
 Push-Location "$InstallDir\agent"

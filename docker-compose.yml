@@ -8,22 +8,36 @@ services:
       - REDIS_URL=${REDIS_URL}
       - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
       - PROTOCOL_VERSION=${PROTOCOL_VERSION:-2}
+      - CLIENT_ORIGINS=${CLIENT_ORIGINS:-https://client.42oclock.com,https://app.42oclock.com}
+      - HANDSHAKE_TIMEOUT_S=${HANDSHAKE_TIMEOUT_S:-20}
       - TERMHOP_RELEASE=${TERMHOP_RELEASE:-development}
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
 
   redis:
     image: redis:7-alpine
-    volumes:
-      - redis-data:/data
+    user: redis
+    command: redis-server --save "" --appendonly no --maxmemory 96mb --maxmemory-policy noeviction
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
-
-volumes:
-  redis-data:
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 128m

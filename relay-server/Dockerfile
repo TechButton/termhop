@@ -12,4 +12,4 @@ USER relay
 
 EXPOSE 8080
 
-CMD ["uvicorn", "relay.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "relay.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-max-size", "262144"]

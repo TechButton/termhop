@@ -50,8 +50,11 @@ class WindowsPtyBackendTests(unittest.IsolatedAsyncioTestCase):
         try:
             read_task = asyncio.create_task(backend.read())
             while not process.read_started.is_set():
-                await asyncio.sleep(0)
+                # A positive delay yields the GIL to the bridge thread on
+                # heavily loaded Linux CI hosts; sleep(0) can starve it.
+                await asyncio.sleep(0.001)
             process.release_read.set()
+            await asyncio.sleep(0.01)
             self.assertEqual(await asyncio.wait_for(read_task, 1), b"hello")
         finally:
             loop.run_in_executor = original
@@ -63,13 +66,17 @@ class WindowsPtyBackendTests(unittest.IsolatedAsyncioTestCase):
 
         read_task = asyncio.create_task(backend.read())
         while not process.read_started.is_set():
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.001)
         read_task.cancel()
         with self.assertRaises(asyncio.CancelledError):
             await read_task
 
         backend.close()
         self.assertFalse(process.alive)
+        # Let the released daemon publish (or discard) its result before the
+        # isolated event loop is closed; otherwise it can race the next test's
+        # newly-created loop on very fast test runs.
+        await asyncio.sleep(0.01)
 
 
 if __name__ == "__main__":

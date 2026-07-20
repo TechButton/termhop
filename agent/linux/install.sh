@@ -7,11 +7,19 @@
 # a venv-managed install directory rather than pip-installing a package.
 # This installer uses a venv-managed checkout.
 set -eu
+umask 077
 
 REPO_URL="${TERMHOP_REPO_URL:-https://github.com/TechButton/termhop.git}"
 INSTALL_DIR="${TERMHOP_INSTALL_DIR:-$HOME/.local/share/termhop}"
 BIN_DIR="$HOME/.local/bin"
 UNIT_DIR="$HOME/.config/systemd/user"
+WAS_ACTIVE=false
+
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet termhop-agent 2>/dev/null; then
+  WAS_ACTIVE=true
+  echo "Stopping the existing TermHop user service for update..."
+  systemctl --user stop termhop-agent
+fi
 
 if [ ! -d "$INSTALL_DIR/.git" ]; then
   echo "Cloning termhop into $INSTALL_DIR..."
@@ -22,9 +30,11 @@ else
 fi
 
 cd "$INSTALL_DIR/agent"
-python3 -m venv .venv
-.venv/bin/pip install --quiet --upgrade pip
-.venv/bin/pip install --quiet -r requirements-linux.txt
+if [ ! -x .venv/bin/python ]; then
+  python3 -m venv .venv
+fi
+.venv/bin/python -m pip install --quiet --upgrade pip
+.venv/bin/python -m pip install --quiet -r requirements-linux.txt
 
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/termhop-agent" <<EOF
@@ -38,6 +48,9 @@ mkdir -p "$UNIT_DIR"
 sed "s|__EXEC_PATH__|$BIN_DIR/termhop-agent|" "$INSTALL_DIR/agent/linux/termhop-agent.service" \
   > "$UNIT_DIR/termhop-agent.service"
 systemctl --user daemon-reload
+if [ "$WAS_ACTIVE" = true ]; then
+  systemctl --user start termhop-agent
+fi
 
 echo
 echo "Installed. Next steps:"

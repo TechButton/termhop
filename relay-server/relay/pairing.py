@@ -9,6 +9,7 @@
 import re
 import time
 import hashlib
+from typing import Awaitable, cast
 
 from redis.asyncio import Redis
 
@@ -44,7 +45,8 @@ return {'ok', unpack(vals)}
 
 def validate_token_format(token: str, cfg: Config) -> None:
     if not (
-        cfg.token_min_len <= len(token) <= cfg.token_max_len
+        isinstance(token, str)
+        and cfg.token_min_len <= len(token) <= cfg.token_max_len
     ) or not _TOKEN_RE.match(token):
         raise TokenInvalid(
             f"token must be {cfg.token_min_len}-{cfg.token_max_len} url-safe chars"
@@ -128,7 +130,10 @@ async def mark_session_established(redis: Redis, session_id: str) -> None:
 
 
 async def get_session_state(redis: Redis, session_id: str) -> str | None:
-    return await redis.hget(_session_key(session_id), "state")  # type: ignore[misc]
+    pending = cast(
+        Awaitable[str | None], redis.hget(_session_key(session_id), "state")
+    )
+    return await pending
 
 
 async def delete_session_record(redis: Redis, session_id: str) -> None:

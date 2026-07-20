@@ -17,7 +17,11 @@ To connect your own computer, you need:
 - A modern browser with JavaScript enabled
 - A `wss://` relay URL reachable by both devices
 
-To run your own relay, you also need Docker with Docker Compose and a TLS reverse proxy or load balancer. The included Compose service listens on `127.0.0.1:8080`; expose it through HTTPS/WSS rather than publishing that port directly to the internet.
+To run your own relay, Docker Compose is recommended, with a TLS reverse proxy
+or load balancer. A hardened native Linux/systemd installation is also
+supported. See [relay deployment and VPS sizing](docs/RELAY_DEPLOYMENT.md).
+The relay listens on `127.0.0.1:8080`; expose it through HTTPS/WSS rather than
+publishing that port directly to the internet.
 
 ## Install the agent
 
@@ -72,7 +76,10 @@ docker compose up -d --build
 curl http://127.0.0.1:8080/healthz
 ```
 
-Before starting, set `DOMAIN` in `.env` to the public relay hostname. Configure your reverse proxy to terminate TLS and proxy WebSocket traffic to `127.0.0.1:8080`. Redis data is stored in the `redis-data` Docker volume.
+Before starting, set `DOMAIN` in `.env` to the public relay hostname. Configure
+your reverse proxy to terminate TLS and proxy WebSocket traffic to
+`127.0.0.1:8080`. Redis holds transient routing state only and persistence is
+disabled intentionally.
 
 ## Repository layout
 
@@ -80,10 +87,14 @@ Before starting, set `DOMAIN` in `.env` to the public relay hostname. Configure 
 - `agent/common/` — shared protocol, encryption, pairing, and session code
 - `agent/linux/` — Linux PTY agent and systemd user service
 - `agent/macos/` — macOS PTY agent and launchd configuration
-- `agent/windows/` — Windows ConPTY agent and scheduled-task installer
+- `agent/windows/` — Windows ConPTY agent and per-user Startup launcher
 
 ## Security and scope
 
 Protocol v2 encrypts terminal data between the browser client and agent. The relay receives routing metadata and ciphertext, not terminal plaintext. Authenticated pairing pins the agent's public key before a terminal session starts.
+
+Read [SECURITY.md](SECURITY.md), the [code reference](docs/CODE_REFERENCE.md),
+and the [security audit](docs/SECURITY_AUDIT_2026-07-20.md) before production
+deployment.
 
 The relay server and agents are licensed under [AGPL-3.0](LICENSE). The hosted account service and browser client are operated separately and are not part of this repository.

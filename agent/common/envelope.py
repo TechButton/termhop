@@ -5,7 +5,7 @@
 import json
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class EnvelopeError(Exception):
@@ -13,11 +13,13 @@ class EnvelopeError(Exception):
 
 
 class Envelope(BaseModel):
-    v: int
-    type: str
-    session_id: str | None = None
-    seq: int
-    ts: int
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    v: int = Field(ge=1, le=255)
+    type: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    session_id: str | None = Field(default=None, max_length=69)
+    seq: int = Field(ge=0, le=2**53 - 1)
+    ts: int = Field(ge=0, le=2**63 - 1)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 

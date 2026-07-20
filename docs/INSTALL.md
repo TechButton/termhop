@@ -166,6 +166,25 @@ pip” or `Register-ScheduledTask: Access is denied`, rerun the current installe
 It updates the checkout and replaces the scheduled-task approach with the
 per-user Startup launcher.
 
+If an update reports `[Errno 13] Permission denied` for the venv's
+`python.exe`, the raw GitHub response may have been cached or an older agent
+may still hold the executable open. Run the freshly updated local installer so
+its process-safe shutdown logic is used:
+
+```powershell
+& "$env:LOCALAPPDATA\termhop\agent\windows\install.ps1"
+```
+
+If it still fails, stop only the TermHop watcher and agent, then rerun that
+local command:
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -like '*termhop-agent-watch.bat*' -or $_.CommandLine -like '*-m windows.main*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+& "$env:LOCALAPPDATA\termhop\agent\windows\install.ps1"
+```
+
 ## Pair in the browser
 
 1. Run `termhop-agent pair --relay wss://relay.example.com` using the command

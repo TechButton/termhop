@@ -77,6 +77,8 @@ def derive_session_keys(
     transcript: bytes,
 ) -> SessionKeys:
     """Authenticated ECDH + HKDF -> directional traffic and proof keys."""
+    if len(own_private_key) != 32 or len(peer_public_key) != 32:
+        raise CryptoError("X25519 private and public keys must each be 32 bytes")
     try:
         shared_secret = nacl.bindings.crypto_scalarmult(own_private_key, peer_public_key)
     except Exception as exc:
@@ -131,10 +133,14 @@ def encrypt(key: bytes, plaintext: bytes, *, aad: bytes) -> tuple[str, str]:
 
 def decrypt(key: bytes, nonce_b64: str, ciphertext_b64: str, *, aad: bytes) -> bytes:
     try:
-        nonce = base64.b64decode(nonce_b64)
-        ciphertext = base64.b64decode(ciphertext_b64)
-    except Exception as exc:
+        nonce = base64.b64decode(nonce_b64, validate=True)
+        ciphertext = base64.b64decode(ciphertext_b64, validate=True)
+    except (ValueError, TypeError) as exc:
         raise CryptoError(f"invalid base64 in encrypted payload: {exc}") from exc
+    if len(nonce) != _NONCE_LEN:
+        raise CryptoError(f"nonce must decode to exactly {_NONCE_LEN} bytes")
+    if len(ciphertext) < nacl.bindings.crypto_aead_xchacha20poly1305_ietf_ABYTES:
+        raise CryptoError("ciphertext is shorter than the authentication tag")
 
     try:
         return nacl.bindings.crypto_aead_xchacha20poly1305_ietf_decrypt(
@@ -150,6 +156,9 @@ def encode_pubkey(pubkey_raw: bytes) -> str:
 
 def decode_pubkey(pubkey_b64: str) -> bytes:
     try:
-        return base64.b64decode(pubkey_b64)
-    except Exception as exc:
+        raw = base64.b64decode(pubkey_b64, validate=True)
+    except (ValueError, TypeError) as exc:
         raise CryptoError(f"invalid base64 pubkey: {exc}") from exc
+    if len(raw) != 32:
+        raise CryptoError("public key must decode to exactly 32 bytes")
+    return raw

@@ -2,6 +2,9 @@
 # by path rather than a single endpoint branching on role for its entire
 # lifetime: /ws/agent only ever plays the agent role, /ws/client only ever
 # plays the client role.
+import asyncio
+import time
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
@@ -22,6 +25,12 @@ def _client_ip(websocket: WebSocket) -> str:
 
 
 async def _ws_loop(websocket: WebSocket, role: Role) -> None:
+    if role == "client":
+        origin = websocket.headers.get("origin")
+        allowed = websocket.app.state.config.client_origins
+        if origin is not None and origin.rstrip("/") not in allowed:
+            await websocket.close(code=_POLICY_VIOLATION, reason="origin not allowed")
+            return
     await websocket.accept()
     app = websocket.app
     ctx = ConnectionContext(
@@ -34,7 +43,18 @@ async def _ws_loop(websocket: WebSocket, role: Role) -> None:
     )
     try:
         while True:
-            raw = await websocket.receive_text()
+            timeout = None
+            if ctx.session_id is not None and ctx.handshake_deadline is not None:
+                slot = ctx.registry.get(ctx.session_id)
+                if slot is not None and slot.phase != "established":
+                    timeout = max(ctx.handshake_deadline - time.monotonic(), 0)
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=timeout)
+            except TimeoutError:
+                await websocket.close(
+                    code=_POLICY_VIOLATION, reason="handshake timed out"
+                )
+                return
             try:
                 envelope = parse_envelope(
                     raw, max_bytes=ctx.cfg.max_envelope_bytes, expected_version=ctx.cfg.protocol_version

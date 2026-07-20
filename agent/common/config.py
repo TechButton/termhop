@@ -1,8 +1,7 @@
 # termhop agent — persisted config, so a restart doesn't need --relay
-# re-passed interactively. Only relay.url is persisted this build step (no
-# keys — ephemeral-only per session, consistent with deferring the
-# long-term device keypair). Reads via stdlib tomllib; writes are a
-# hand-written TOML string since tomllib has no dump and this is one key.
+# re-passed interactively. The relay URL and durable device credential are
+# stored after pairing. Reads use stdlib tomllib; writes are hand-written TOML
+# because tomllib has no dump support and the schema is intentionally tiny.
 #
 # Config directory is platform-specific (Linux XDG, macOS Application
 # Support, Windows %APPDATA%) despite this module living in common/ — it's
@@ -12,6 +11,7 @@
 # a `path: Path = SOME_CONSTANT` default only evaluates once at import.
 import os
 import sys
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,8 +69,22 @@ def save_config(config: AgentConfig, path: Path | None = None) -> None:
                 f'secret = "{config.device_secret}"',
             ]
         )
-    path.write_text("\n".join(lines) + "\n")
-    # The durable device credential grants terminal access. Restrict it to
-    # the installing OS user even if their default umask is permissive.
-    if os.name != "nt":
-        path.chmod(0o600)
+    # Write to a mode-0600 temporary file and atomically replace the config.
+    # This avoids a first-write window where a permissive umask could expose
+    # the durable device credential before a later chmod call.
+    fd, temporary_name = tempfile.mkstemp(prefix=".config-", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        if os.name != "nt":
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1  # fdopen owns and closes the descriptor from this point.
+            handle.write("\n".join(lines) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        temporary.unlink(missing_ok=True)
+        raise

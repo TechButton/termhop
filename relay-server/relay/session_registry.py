@@ -7,10 +7,12 @@
 # so there's no interleaving risk despite running under asyncio — each handler
 # coroutine only ever touches the registry between awaits, never during one.
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import WebSocket
 
-Role = str  # "agent" | "client"
+Role = Literal["agent", "client"]
+SessionPhase = Literal["pairing", "waiting_resume", "resuming", "established"]
 
 
 def other_role(role: Role) -> Role:
@@ -21,6 +23,7 @@ def other_role(role: Role) -> Role:
 class SessionSlot:
     agent: WebSocket | None = None
     client: WebSocket | None = None
+    phase: SessionPhase = "pairing"
 
     def get(self, role: Role) -> WebSocket | None:
         return self.agent if role == "agent" else self.client
