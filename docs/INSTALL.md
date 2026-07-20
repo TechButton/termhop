@@ -14,6 +14,9 @@ You need:
 The installer creates a per-user checkout and Python virtual environment. It
 does not require root or Administrator access. The first pairing command prints
 a short-lived `termhop://pair?...` URL; treat that URL as a temporary secret.
+The Linux installer checks these prerequisites before cloning anything and
+prints the distribution-specific package command when Python's
+`venv`/`ensurepip` support is missing.
 
 ## Linux
 
@@ -212,7 +215,10 @@ updating.
   `$HOME/.local/bin` to `PATH`, or run `$HOME/.local/bin/termhop-agent`.
 - **`python` is not recognized on Windows:** install Python with its PATH option
   enabled, then open a new PowerShell window.
-- **`venv` cannot be created on Ubuntu/Debian:** install `python3-venv`.
+- **`venv` cannot be created on Ubuntu/Debian:** install `python3-venv` (or the
+  versioned package reported by the installer), then rerun the installer. If a
+  previous attempt created an incomplete `.venv`, the installer detects and
+  recreates only that TermHop environment.
 - **The relay cannot connect:** confirm the URL begins with `wss://`, its TLS
   certificate is valid, and both the browser and agent can reach it.
 - **A saved device stays offline:** restart the OS-specific background agent and
