@@ -12,3 +12,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Local browser/build artifacts and private deployment work. The public
+# repository intentionally contains only relay and agent source.
+.playwright-mcp/
+client/
+ops/
