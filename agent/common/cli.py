@@ -26,65 +26,64 @@ async def pair_and_stream(
 ) -> int:
     hostname = socket.gethostname()
     client = RelayClient(relay_url, agent_hostname=hostname)
+    try:
+        await client.connect()
+        if config.device_id and config.device_secret:
+            print(f"termhop agent reconnecting saved device {config.device_id}.")
+            await client.send_resume_init(
+                device_id=config.device_id, device_secret=config.device_secret
+            )
+            await client.await_resume_and_complete()
+            print("Saved client reconnected. Starting a new shell after agent restart.")
+            backend = backend_factory()
+            backend.spawn([os.environ.get(shell_env_var, default_shell)])
+            await run_pty_session(client, backend)
+            return 0
 
-    await client.connect()
-    if config.device_id and config.device_secret:
-        print(f"termhop agent reconnecting saved device {config.device_id}.")
-        await client.send_resume_init(
-            device_id=config.device_id, device_secret=config.device_secret
+        config.device_id = pairing.generate_device_id()
+        config.device_secret = pairing.generate_pairing_secret()
+        token, session_id = await client.send_pair_init(device_id=config.device_id)
+        await client.await_pair_init_ack()
+
+        assert client.pairing_secret is not None
+        assert client.agent_pubkey_b64 is not None
+        pairing_uri = build_pairing_uri(
+            relay_url,
+            token,
+            hostname,
+            client.pairing_secret,
+            client.agent_pubkey_b64,
+            session_id,
         )
-        await client.await_resume_and_complete()
-        print("Saved client reconnected. Starting a new shell after agent restart.")
+        print("termhop agent ready to pair.")
+        print(f"  relay:      {relay_url}")
+        print(f"  hostname:   {hostname}")
+        print(f"  token:      {token}")
+        print(f"  session_id: {session_id}")
+        print(f"  link:       {pairing_uri}")
+        print("Waiting for a client to pair...")
+
+        try:
+            await client.await_pair_challenge_and_complete()
+        except HandshakeError as exc:
+            print(f"Pairing failed: {exc}", file=sys.stderr)
+            return 1
+
+        # Send the long-lived credential through the newly authenticated encrypted
+        # channel. It is deliberately different from the short-lived pairing-link
+        # secret, so an old leaked link cannot reconnect after its token expires.
+        await client.send_device_credential(config.device_id, config.device_secret)
+        # Persist only after both endpoints have authenticated the handshake; an
+        # interrupted/failed first pairing must not strand the agent in resume
+        # mode with a credential no client ever received.
+        save_config(config)
+        print("Paired. Starting shell session.")
         backend = backend_factory()
         backend.spawn([os.environ.get(shell_env_var, default_shell)])
         await run_pty_session(client, backend)
-        await client.close()
         return 0
-
-    config.device_id = pairing.generate_device_id()
-    config.device_secret = pairing.generate_pairing_secret()
-    token, session_id = await client.send_pair_init(device_id=config.device_id)
-    await client.await_pair_init_ack()
-
-    assert client.pairing_secret is not None
-    assert client.agent_pubkey_b64 is not None
-    pairing_uri = build_pairing_uri(
-        relay_url,
-        token,
-        hostname,
-        client.pairing_secret,
-        client.agent_pubkey_b64,
-        session_id,
-    )
-    print("termhop agent ready to pair.")
-    print(f"  relay:      {relay_url}")
-    print(f"  hostname:   {hostname}")
-    print(f"  token:      {token}")
-    print(f"  session_id: {session_id}")
-    print(f"  link:       {pairing_uri}")
-    print("Waiting for a client to pair...")
-
-    try:
-        await client.await_pair_challenge_and_complete()
-    except HandshakeError as exc:
-        print(f"Pairing failed: {exc}", file=sys.stderr)
+    finally:
         await client.close()
-        return 1
-
-    # Send the long-lived credential through the newly authenticated encrypted
-    # channel. It is deliberately different from the short-lived pairing-link
-    # secret, so an old leaked link cannot reconnect after its token expires.
-    await client.send_device_credential(config.device_id, config.device_secret)
-    # Persist only after both endpoints have authenticated the handshake; an
-    # interrupted/failed first pairing must not strand the agent in resume
-    # mode with a credential no client ever received.
-    save_config(config)
-    print("Paired. Starting shell session.")
-    backend = backend_factory()
-    backend.spawn([os.environ.get(shell_env_var, default_shell)])
-    await run_pty_session(client, backend)
-    await client.close()
-    return 0
 
 
 def run_cli(
@@ -141,3 +140,11 @@ def run_cli(
     except HandshakeError as exc:
         print(f"Pairing failed: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("\nTermHop agent stopped. Your saved pairing was kept.")
+        if sys.platform.startswith("linux"):
+            print(
+                "Run in the background with: "
+                "systemctl --user enable --now termhop-agent"
+            )
+        return 130

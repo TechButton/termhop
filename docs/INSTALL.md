@@ -45,13 +45,17 @@ termhop-agent pair --relay wss://relay.example.com
 ```
 
 Open the printed pairing URL in the browser client, or use its QR scanner. The
-initial command remains attached to the first terminal session. After ending
-that session, enable the persistent per-user agent:
+initial command runs in the foreground. Once pairing succeeds, press `Ctrl+C`;
+the agent exits cleanly and keeps the saved pairing. Then start the persistent
+per-user agent:
 
 ```sh
 systemctl --user enable --now termhop-agent
 systemctl --user status termhop-agent
 ```
+
+You do not need to run `termhop-agent pair` again. The background service uses
+the saved relay and device credentials automatically.
 
 To keep it running when your Linux login session is closed:
 

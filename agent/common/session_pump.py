@@ -53,17 +53,30 @@ async def run_pty_session(client: RelayClient, backend: PTYBackend) -> None:
     to_relay = asyncio.create_task(_pump_pty_to_relay(client, backend))
     to_pty = asyncio.create_task(_pump_relay_to_pty(client, backend))
 
-    done, pending = await asyncio.wait({to_relay, to_pty}, return_when=asyncio.FIRST_COMPLETED)
+    tasks = {to_relay, to_pty}
+    try:
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_COMPLETED
+        )
 
-    for task in pending:
-        task.cancel()
-    await asyncio.gather(*pending, return_exceptions=True)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
-    for task in done:
-        exc = task.exception()
-        if exc is not None and not isinstance(
-            exc, (websockets.exceptions.ConnectionClosed, HandshakeError, EnvelopeError)
-        ):
-            raise exc
-
-    backend.close()
+        for task in done:
+            exc = task.exception()
+            if exc is not None and not isinstance(
+                exc,
+                (
+                    websockets.exceptions.ConnectionClosed,
+                    HandshakeError,
+                    EnvelopeError,
+                ),
+            ):
+                raise exc
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        backend.close()
