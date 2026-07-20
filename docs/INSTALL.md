@@ -219,6 +219,12 @@ updating.
   versioned package reported by the installer), then rerun the installer. If a
   previous attempt created an incomplete `.venv`, the installer detects and
   recreates only that TermHop environment.
+- **Linux still prints the old `No module named pip` error after updating:**
+  bypass a stale raw-content cache once by running the checked-out installer:
+
+  ```sh
+  sh "$HOME/.local/share/termhop/agent/linux/install.sh"
+  ```
 - **The relay cannot connect:** confirm the URL begins with `wss://`, its TLS
   certificate is valid, and both the browser and agent can reach it.
 - **A saved device stays offline:** restart the OS-specific background agent and

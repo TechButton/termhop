@@ -55,7 +55,7 @@ else
 fi
 
 cd "$INSTALL_DIR/agent"
-if [ -x .venv/bin/python ] && ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
+if [ -d .venv ] && ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
   echo "The existing virtual environment is incomplete; recreating it..."
   rm -rf .venv
 fi
