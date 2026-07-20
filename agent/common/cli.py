@@ -26,6 +26,7 @@ async def pair_and_stream(
     default_shell: str,
 ) -> int:
     hostname = socket.gethostname()
+    shell_cwd = os.path.expanduser("~")
     client = RelayClient(relay_url, agent_hostname=hostname)
     try:
         await client.connect()
@@ -37,7 +38,7 @@ async def pair_and_stream(
             await client.await_resume_and_complete()
             print("Saved client reconnected. Starting a new shell after agent restart.")
             backend = backend_factory()
-            backend.spawn([os.environ.get(shell_env_var, default_shell)])
+            backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
             await run_pty_session(client, backend)
             return 0
 
@@ -81,7 +82,7 @@ async def pair_and_stream(
         save_config(config)
         print("Paired. Starting shell session.")
         backend = backend_factory()
-        backend.spawn([os.environ.get(shell_env_var, default_shell)])
+        backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
         await run_pty_session(client, backend)
         return 0
     finally:
