@@ -18,11 +18,25 @@ def render_pairing_qr(value: str) -> str:
     code.add_data(value)
     code.make(fit=True)
     matrix = code.get_matrix()
-    # Two horizontal terminal cells per QR module preserve the square aspect
-    # ratio on typical terminals (which are taller than they are wide).
-    return "\n".join(
-        "".join("██" if dark else "  " for dark in row) for row in matrix
-    )
+    # Pack two QR rows into one terminal cell. This keeps the code compact
+    # enough to scan from a normal laptop display without zooming out while
+    # preserving each module's contrast.
+    rows = []
+    for index in range(0, len(matrix), 2):
+        top = matrix[index]
+        bottom = matrix[index + 1] if index + 1 < len(matrix) else [False] * len(top)
+        line = []
+        for top_dark, bottom_dark in zip(top, bottom):
+            if top_dark and bottom_dark:
+                line.append("█")
+            elif top_dark:
+                line.append("▀")
+            elif bottom_dark:
+                line.append("▄")
+            else:
+                line.append(" ")
+        rows.append("".join(line))
+    return "\n".join(rows)
 
 
 def print_pairing_qr(value: str) -> None:

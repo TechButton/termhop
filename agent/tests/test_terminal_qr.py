@@ -8,10 +8,10 @@ class TerminalQrTests(unittest.TestCase):
         value = "termhop://pair?relay=wss%3A%2F%2Frelay.example.com&token=token"
         rendered = render_pairing_qr(value)
         lines = rendered.splitlines()
-        self.assertGreater(len(lines), 20)
+        self.assertGreater(len(lines), 15)
         self.assertEqual(len({len(line) for line in lines}), 1)
-        self.assertIn("██", rendered)
-        self.assertIn("  ", rendered)
+        self.assertTrue(any(char in rendered for char in "█▀▄"))
+        self.assertIn(" ", rendered)
 
 
 if __name__ == "__main__":
