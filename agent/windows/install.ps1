@@ -12,23 +12,69 @@ $RepoUrl = if ($env:TERMHOP_REPO_URL) { $env:TERMHOP_REPO_URL } else { "https://
 $InstallDir = if ($env:TERMHOP_INSTALL_DIR) { $env:TERMHOP_INSTALL_DIR } else { "$env:LOCALAPPDATA\termhop" }
 $BinDir = "$env:LOCALAPPDATA\termhop\bin"
 $StartupDir = [Environment]::GetFolderPath("Startup")
+$AgentPython = "$InstallDir\agent\.venv\Scripts\python.exe"
+$WrapperPath = "$BinDir\termhop-agent.bat"
+$WatchPath = "$BinDir\termhop-agent-watch.bat"
+$StartupLauncher = "$StartupDir\TermhopAgent.vbs"
+
+function Assert-NativeSuccess {
+    param([string]$Action)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Action failed with exit code $LASTEXITCODE."
+    }
+}
 
 if (Test-Path "$InstallDir\.git") {
     Write-Host "Updating existing checkout at $InstallDir..."
     git -C $InstallDir pull --ff-only
+    Assert-NativeSuccess "Git update"
 } else {
     Write-Host "Cloning termhop into $InstallDir..."
     git clone --depth 1 $RepoUrl $InstallDir
+    Assert-NativeSuccess "Git clone"
+}
+
+# Stop only processes whose command/executable resolves to this TermHop
+# installation. The watcher must stop first or it will immediately respawn the
+# agent while its virtual environment is being updated.
+$TermhopProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+$WatcherProcesses = @($TermhopProcesses | Where-Object {
+    $_.CommandLine -and
+    $_.CommandLine.IndexOf($WatchPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+})
+$AgentProcesses = @($TermhopProcesses | Where-Object {
+    $_.ExecutablePath -and
+    $_.ExecutablePath.Equals($AgentPython, [StringComparison]::OrdinalIgnoreCase) -and
+    $_.CommandLine -and
+    $_.CommandLine.IndexOf("-m windows.main", [StringComparison]::OrdinalIgnoreCase) -ge 0
+})
+$RestartBackgroundAfterUpdate = $WatcherProcesses.Count -gt 0
+if ($WatcherProcesses.Count -gt 0 -or $AgentProcesses.Count -gt 0) {
+    Write-Host "Stopping the existing TermHop background agent for update..."
+    $WatcherProcesses | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    $AgentProcesses | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 500
 }
 
 Push-Location "$InstallDir\agent"
-python -m venv .venv
-& .venv\Scripts\python.exe -m pip install --quiet --upgrade pip
-& .venv\Scripts\python.exe -m pip install --quiet -r requirements-windows.txt
-Pop-Location
+try {
+    if (-not (Test-Path $AgentPython)) {
+        python -m venv .venv
+        Assert-NativeSuccess "Virtual environment creation"
+    }
+    & $AgentPython -m pip install --quiet --upgrade pip
+    Assert-NativeSuccess "pip upgrade"
+    & $AgentPython -m pip install --quiet -r requirements-windows.txt
+    Assert-NativeSuccess "TermHop dependency installation"
+} finally {
+    Pop-Location
+}
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-$WrapperPath = "$BinDir\termhop-agent.bat"
 @"
 @echo off
 cd /d "$InstallDir\agent"
@@ -36,7 +82,6 @@ cd /d "$InstallDir\agent"
 "@ | Set-Content -Path $WrapperPath -Encoding ASCII
 
 New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
-$WatchPath = "$BinDir\termhop-agent-watch.bat"
 @"
 @echo off
 :reconnect
@@ -46,18 +91,31 @@ goto reconnect
 "@ | Set-Content -Path $WatchPath -Encoding ASCII
 
 # WScript starts the reconnect loop without leaving a console window open.
-$StartupLauncher = "$StartupDir\TermhopAgent.vbs"
 @"
 Set Shell = CreateObject("WScript.Shell")
 Shell.Run Chr(34) & "$WatchPath" & Chr(34), 0, False
 "@ | Set-Content -Path $StartupLauncher -Encoding ASCII
 
+$ConfigPath = "$env:APPDATA\termhop\config.toml"
+$HasSavedPairing = (
+    (Test-Path $ConfigPath) -and
+    [bool](Select-String -Path $ConfigPath -Pattern '^\s*\[device\]\s*$' -Quiet)
+)
+
 Write-Host ""
-Write-Host "Installed. Next steps:"
-Write-Host "  1. Pair once from this PowerShell window:"
-Write-Host "       & `"$WrapperPath`" pair --relay wss://relay.yourdomain.com"
-Write-Host "  2. A no-admin per-user Startup launcher is installed at:"
+Write-Host "Installed successfully."
+if ($RestartBackgroundAfterUpdate -and $HasSavedPairing) {
+    & "$env:SystemRoot\System32\wscript.exe" "$StartupLauncher"
+    Write-Host "The previously running TermHop background agent was restarted."
+} elseif ($HasSavedPairing) {
+    Write-Host "A saved pairing was found; you do not need to pair again."
+} else {
+    Write-Host "Pair once from this PowerShell window:"
+    Write-Host "  & `"$WrapperPath`" pair --relay wss://relay.yourdomain.com"
+}
+Write-Host ""
+Write-Host "A no-admin per-user Startup launcher is installed at:"
 Write-Host "       $StartupLauncher"
-Write-Host "     It reconnects automatically at your next login. To start the"
-Write-Host "     background reconnect loop now, after pairing, run:"
-Write-Host "       & `"$env:SystemRoot\System32\wscript.exe`" `"$StartupLauncher`""
+Write-Host "It reconnects automatically at your next login. To start the"
+Write-Host "background reconnect loop now, after pairing, run:"
+Write-Host "  & `"$env:SystemRoot\System32\wscript.exe`" `"$StartupLauncher`""

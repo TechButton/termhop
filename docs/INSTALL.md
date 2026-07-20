@@ -140,7 +140,9 @@ irm https://raw.githubusercontent.com/TechButton/termhop/main/agent/windows/inst
 The installer uses the virtual environment's Python to upgrade pip and install
 packages. It creates a no-admin per-user Startup launcher rather than a
 scheduled task, because scheduled-task creation may be blocked for standard
-accounts.
+accounts. On an update, it stops only processes belonging to that TermHop
+installation, reuses the existing virtual environment, and restarts the
+background agent if it was already running.
 
 After the first terminal session ends, start the hidden reconnect loop now:
 
