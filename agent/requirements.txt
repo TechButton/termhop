@@ -2,3 +2,4 @@ websockets==13.1
 pynacl==1.6.2
 cryptography==49.0.0
 pydantic==2.13.4
+qrcode==8.2

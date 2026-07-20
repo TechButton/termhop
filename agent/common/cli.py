@@ -14,6 +14,7 @@ from common.pairing_link import build_pairing_uri
 from common.ptybackend import PTYBackend
 from common.relay_client import HandshakeError, RelayClient
 from common.session_pump import run_pty_session
+from common.terminal_qr import print_pairing_qr
 
 
 async def pair_and_stream(
@@ -61,6 +62,7 @@ async def pair_and_stream(
         print(f"  token:      {token}")
         print(f"  session_id: {session_id}")
         print(f"  link:       {pairing_uri}")
+        print_pairing_qr(pairing_uri)
         print("Waiting for a client to pair...")
 
         try:

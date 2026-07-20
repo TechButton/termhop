@@ -37,6 +37,8 @@ boundary begins. Module headers provide the local implementation details.
 - `common/config.py`: OS-specific configuration and atomic owner-only secret
   writes. The durable device secret grants terminal access and is never sent
   to the account service.
+- `common/terminal_qr.py`: renders the short-lived pairing URI as a terminal
+  QR matrix using Unicode blocks; the plain URL remains visible as fallback.
 - `common/session_pump.py`: two-way encrypted PTY pump and deterministic task,
   PTY, and WebSocket cleanup.
 - `linux/pty_backend.py`, `macos/pty_backend.py`: asyncio-readable POSIX PTYs.

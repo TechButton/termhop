@@ -61,9 +61,9 @@ Pair the installed agent with your relay:
 termhop-agent pair --relay wss://relay.example.com
 ```
 
-The command produces an authenticated pairing link. Open
+The command prints an authenticated pairing link and a terminal QR code. Open
 [client.42oclock.com](https://client.42oclock.com), choose **Pair your relay**,
-then scan the QR code or select **Paste URL**. Pairing secrets are short-lived
+then scan the terminal QR code or select **Paste URL**. Pairing secrets are short-lived
 and are sent out of band from the relay connection.
 
 ## Run a relay

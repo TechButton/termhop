@@ -47,7 +47,8 @@ export PATH="$HOME/.local/bin:$PATH"
 termhop-agent pair --relay wss://relay.example.com
 ```
 
-Open the printed pairing URL in the browser client, or use its QR scanner. The
+The agent prints both the pairing URL and a terminal QR code. Scan the QR code
+with the browser client's **Scan QR** option, or use the URL as a fallback. The
 initial command runs in the foreground. Once pairing succeeds, press `Ctrl+C`;
 the agent exits cleanly and keeps the saved pairing. Then start the persistent
 per-user agent:
