@@ -46,7 +46,9 @@ async def _pump_relay_to_pty(client: RelayClient, backend: PTYBackend) -> None:
             _logger.debug("ignoring unhandled message type=%s", envelope.type)
 
 
-async def run_pty_session(client: RelayClient, backend: PTYBackend) -> None:
+async def run_pty_session(
+    client: RelayClient, backend: PTYBackend, *, preserve_backend: bool = False
+) -> None:
     """Runs until the PTY exits, the peer closes the session, or the WS
     connection drops. Both pump directions are cancelled together so
     neither leaks a dangling task."""
@@ -79,4 +81,5 @@ async def run_pty_session(client: RelayClient, backend: PTYBackend) -> None:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        backend.close()
+        if not preserve_backend:
+            backend.close()

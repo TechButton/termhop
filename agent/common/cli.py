@@ -17,6 +17,39 @@ from common.session_pump import run_pty_session
 from common.terminal_qr import print_pairing_qr
 
 
+async def _run_persistent_session(
+    client: RelayClient,
+    backend: PTYBackend,
+    *,
+    relay_url: str,
+    hostname: str,
+    config: AgentConfig,
+) -> RelayClient:
+    """Keep one PTY alive while browser relay connections detach/reconnect."""
+    while backend.is_alive():
+        await run_pty_session(client, backend, preserve_backend=True)
+        if not backend.is_alive():
+            break
+        await client.close()
+        while backend.is_alive():
+            await asyncio.sleep(1)
+            replacement = RelayClient(relay_url, agent_hostname=hostname)
+            try:
+                await replacement.connect()
+                await replacement.send_resume_init(
+                    device_id=config.device_id or "",
+                    device_secret=config.device_secret or "",
+                )
+                await replacement.await_resume_and_complete()
+                client = replacement
+                break
+            except Exception:
+                await replacement.close()
+    backend.close()
+    await client.close()
+    return client
+
+
 async def pair_and_stream(
     relay_url: str,
     *,
@@ -39,7 +72,9 @@ async def pair_and_stream(
             print("Saved client reconnected. Starting a new shell after agent restart.")
             backend = backend_factory()
             backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
-            await run_pty_session(client, backend)
+            await _run_persistent_session(
+                client, backend, relay_url=relay_url, hostname=hostname, config=config
+            )
             return 0
 
         config.device_id = pairing.generate_device_id()
@@ -83,7 +118,9 @@ async def pair_and_stream(
         print("Paired. Starting shell session.")
         backend = backend_factory()
         backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
-        await run_pty_session(client, backend)
+        await _run_persistent_session(
+            client, backend, relay_url=relay_url, hostname=hostname, config=config
+        )
         return 0
     finally:
         await client.close()
