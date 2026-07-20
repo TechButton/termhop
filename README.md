@@ -4,7 +4,7 @@ termhop gives you an end-to-end encrypted terminal in a phone or desktop browser
 
 ## Try the disposable demo
 
-Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The environment is wiped when you log out or the demo expires.
+Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The demo lasts at most 10 minutes, offers fixed restricted launchers instead of a general shell, and destroys the environment when you log out or time expires.
 
 ## What you need
 
