@@ -3,9 +3,10 @@
 # Unlike POSIX ptyprocess, pywinpty's PtyProcess.read() is blocking
 # synchronous I/O with no add_reader-equivalent hook into asyncio on
 # Windows (there's no arbitrary-fd readiness notification the way POSIX
-# select/epoll gives Linux/macOS), so the read bridge uses run_in_executor
-# (a thread-pool call) instead of the Linux/macOS backends' loop.add_reader
-# trick.
+# select/epoll gives Linux/macOS). A small daemon-thread bridge is used instead
+# of asyncio's default executor: a cancelled ConPTY read can remain blocked
+# inside pywinpty, and asyncio.run() waits for default-executor workers during
+# shutdown. That made session close and Ctrl+C appear to hang on Windows.
 #
 # Two things NOT verifiable in this Linux build environment — confirm on
 # real Windows hardware before relying on them:
@@ -21,6 +22,7 @@
 #      (not in common/session_pump.py, which is platform-agnostic and
 #      contracted to bytes per PTYBackend).
 import asyncio
+import threading
 
 from winpty import PtyProcess
 
@@ -38,7 +40,45 @@ class PtyWindowsBackend(PTYBackend):
         proc = self._proc
         assert proc is not None
         loop = asyncio.get_running_loop()
-        data = await loop.run_in_executor(None, proc.read, max_bytes)
+
+        # There is only one read coroutine in the session pump, so at most one
+        # bridge thread exists for a backend at a time. If the coroutine is
+        # cancelled, the daemon may remain in pywinpty briefly, but it cannot
+        # hold up event-loop or interpreter shutdown. close() terminates the
+        # ConPTY process to release it.
+        completed: asyncio.Future[bytes | str] = loop.create_future()
+
+        def finish_read(outcome: tuple[bool, bytes | str | BaseException]) -> None:
+            if completed.done():
+                return
+            succeeded, value = outcome
+            if succeeded:
+                assert isinstance(value, (bytes, str))
+                completed.set_result(value)
+            else:
+                assert isinstance(value, BaseException)
+                completed.set_exception(value)
+
+        def blocking_read() -> None:
+            try:
+                outcome: tuple[bool, bytes | str | BaseException] = (
+                    True,
+                    proc.read(max_bytes),
+                )
+            except BaseException as exc:
+                outcome = (False, exc)
+            try:
+                loop.call_soon_threadsafe(finish_read, outcome)
+            except RuntimeError:
+                # The event loop can already be closed after cancellation.
+                pass
+
+        threading.Thread(
+            target=blocking_read,
+            name="termhop-conpty-read",
+            daemon=True,
+        ).start()
+        data = await completed
         if not data:
             raise EOFError
         return data if isinstance(data, bytes) else data.encode("utf-8", errors="replace")
