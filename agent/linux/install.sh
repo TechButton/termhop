@@ -41,8 +41,10 @@ systemctl --user daemon-reload
 
 echo
 echo "Installed. Next steps:"
-echo "  1. termhop-agent pair --relay wss://relay.yourdomain.com"
-echo "  2. Once paired, enable the service to survive reboots:"
+echo "  1. Make the command available in this shell:"
+echo "       export PATH=\"\$HOME/.local/bin:\$PATH\""
+echo "  2. Pair once:"
+echo "       termhop-agent pair --relay wss://relay.yourdomain.com"
+echo "  3. Once paired, enable the service to survive reboots:"
 echo "       systemctl --user enable --now termhop-agent"
-echo "       loginctl enable-linger \$USER   # required for a *user* unit to"
-echo "                                       # run without an active login session"
+echo "       sudo loginctl enable-linger \$USER   # optional: run while logged out"

@@ -4,7 +4,7 @@ termhop gives you an end-to-end encrypted terminal in a phone or desktop browser
 
 ## Try the disposable demo
 
-Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The demo lasts at most 10 minutes, offers fixed restricted launchers instead of a general shell, and destroys the environment when you log out or time expires.
+Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The 10-minute allowlist includes Snake, 2048, original ANSI space and Matrix animations, a relay showcase, and restricted Codex and Claude launchers. The environment is destroyed when you log out or time expires.
 
 ## What you need
 
@@ -12,7 +12,7 @@ For the hosted demo, only a current browser is required.
 
 To connect your own computer, you need:
 
-- Python 3.11 or newer and Git
+- Python 3.11 or newer and Git on the computer running the agent
 - Linux, macOS, or Windows 10/11
 - A modern browser with JavaScript enabled
 - A `wss://` relay URL reachable by both devices
@@ -20,6 +20,15 @@ To connect your own computer, you need:
 To run your own relay, you also need Docker with Docker Compose and a TLS reverse proxy or load balancer. The included Compose service listens on `127.0.0.1:8080`; expose it through HTTPS/WSS rather than publishing that port directly to the internet.
 
 ## Install the agent
+
+The browser client does not need to be installed: open
+[client.42oclock.com](https://client.42oclock.com). Install the agent only on
+the Linux, macOS, or Windows computer whose terminal you want to reach.
+
+Before installing, verify `python`/`python3` is version 3.11 or newer and that
+`git` is available. See the [complete OS installation guide](docs/INSTALL.md)
+for prerequisites, persistent startup, verification, updating, troubleshooting,
+and removal.
 
 Linux:
 
@@ -39,13 +48,19 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/TechButton/termhop/main/agent/windows/install.ps1 | iex
 ```
 
+The Windows installer is per-user and does not require an Administrator
+PowerShell window.
+
 Pair the installed agent with your relay:
 
 ```sh
 termhop-agent pair --relay wss://relay.example.com
 ```
 
-The command produces an authenticated pairing link. Open [client.42oclock.com](https://client.42oclock.com), then scan its QR code or paste the URL. Pairing secrets are short-lived and are sent out of band from the relay connection.
+The command produces an authenticated pairing link. Open
+[client.42oclock.com](https://client.42oclock.com), choose **Pair your relay**,
+then scan the QR code or select **Paste URL**. Pairing secrets are short-lived
+and are sent out of band from the relay connection.
 
 ## Run a relay
 

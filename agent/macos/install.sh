@@ -38,14 +38,17 @@ mkdir -p "$LAUNCH_AGENTS_DIR" "$LOG_DIR"
 sed -e "s|__EXEC_PATH__|$BIN_DIR/termhop-agent|" -e "s|__LOG_DIR__|$LOG_DIR|" \
   "$INSTALL_DIR/agent/macos/termhop-agent.plist" > "$LAUNCH_AGENTS_DIR/$LABEL.plist"
 
-# bootout-before-bootstrap makes re-running this installer idempotent —
-# bootstrap fails loudly (unlike the deprecated load/unload, which
-# silently no-ops) if the label is already loaded.
+# Stop an older loaded copy, if present. Do not bootstrap the new agent until
+# the user completes first pairing; otherwise launchd would repeatedly start an
+# unconfigured agent with no relay URL.
 launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENTS_DIR/$LABEL.plist" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENTS_DIR/$LABEL.plist"
 
 echo
 echo "Installed. Next steps:"
-echo "  1. termhop-agent pair --relay wss://relay.yourdomain.com"
-echo "  2. The launchd agent is already loaded and will run at login going"
-echo "     forward (RunAtLoad + KeepAlive) — logs at $LOG_DIR/"
+echo "  1. Make the command available in this shell:"
+echo "       export PATH=\"\$HOME/.local/bin:\$PATH\""
+echo "  2. Pair once:"
+echo "       termhop-agent pair --relay wss://relay.yourdomain.com"
+echo "  3. After that terminal session ends, start the persistent agent:"
+echo "       launchctl bootstrap gui/\$(id -u) \"$LAUNCH_AGENTS_DIR/$LABEL.plist\""
+echo "     It will reconnect automatically and run at login. Logs: $LOG_DIR/"

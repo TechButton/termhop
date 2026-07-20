@@ -2,22 +2,16 @@
 #   irm https://raw.githubusercontent.com/.../agent/windows/install.ps1 | iex
 #   termhop-agent pair --relay wss://relay.yourdomain.com
 #
-# This installer uses a venv-managed checkout and a .bat wrapper.
-#
-# Scheduled-task-at-logon, not a real Windows Service: a true service
-# needs pywin32's service framework (a new dependency not otherwise needed
-# anywhere in this codebase) and typically runs as LocalSystem/a service
-# account — a different privilege model than "runs under your own account"
-# that Linux (systemd --user) and macOS (launchd per-user agent) already
-# use. An AtLogon-triggered task with -RunLevel Limited (no elevation)
-# matches that same per-user, no-admin-needed model.
+# This installer uses a venv-managed checkout and per-user Startup launcher.
+# It deliberately requires no administrator rights. Scheduled-task creation is
+# denied by policy on some otherwise-supported Windows accounts.
 
 $ErrorActionPreference = "Stop"
 
 $RepoUrl = if ($env:TERMHOP_REPO_URL) { $env:TERMHOP_REPO_URL } else { "https://github.com/TechButton/termhop.git" }
 $InstallDir = if ($env:TERMHOP_INSTALL_DIR) { $env:TERMHOP_INSTALL_DIR } else { "$env:LOCALAPPDATA\termhop" }
 $BinDir = "$env:LOCALAPPDATA\termhop\bin"
-$TaskName = "TermhopAgent"
+$StartupDir = [Environment]::GetFolderPath("Startup")
 
 if (Test-Path "$InstallDir\.git") {
     Write-Host "Updating existing checkout at $InstallDir..."
@@ -29,8 +23,8 @@ if (Test-Path "$InstallDir\.git") {
 
 Push-Location "$InstallDir\agent"
 python -m venv .venv
-& .venv\Scripts\pip.exe install --quiet --upgrade pip
-& .venv\Scripts\pip.exe install --quiet -r requirements-windows.txt
+& .venv\Scripts\python.exe -m pip install --quiet --upgrade pip
+& .venv\Scripts\python.exe -m pip install --quiet -r requirements-windows.txt
 Pop-Location
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -41,20 +35,29 @@ cd /d "$InstallDir\agent"
 "$InstallDir\agent\.venv\Scripts\python.exe" -m windows.main %*
 "@ | Set-Content -Path $WrapperPath -Encoding ASCII
 
-$Action = New-ScheduledTaskAction -Execute $WrapperPath -Argument "pair"
-$Trigger = New-ScheduledTaskTrigger -AtLogOn
-$Settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+New-Item -ItemType Directory -Force -Path $StartupDir | Out-Null
+$WatchPath = "$BinDir\termhop-agent-watch.bat"
+@"
+@echo off
+:reconnect
+call "$WrapperPath" pair
+timeout /t 5 /nobreak >nul
+goto reconnect
+"@ | Set-Content -Path $WatchPath -Encoding ASCII
 
-# Unregister first so re-running this installer is idempotent, matching
-# the bootout-before-bootstrap pattern the macOS installer uses.
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-
-Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -RunLevel Limited -Force | Out-Null
+# WScript starts the reconnect loop without leaving a console window open.
+$StartupLauncher = "$StartupDir\TermhopAgent.vbs"
+@"
+Set Shell = CreateObject("WScript.Shell")
+Shell.Run Chr(34) & "$WatchPath" & Chr(34), 0, False
+"@ | Set-Content -Path $StartupLauncher -Encoding ASCII
 
 Write-Host ""
 Write-Host "Installed. Next steps:"
-Write-Host "  1. termhop-agent pair --relay wss://relay.yourdomain.com"
-Write-Host "     (add $BinDir to your PATH, or call $WrapperPath directly)"
-Write-Host "  2. The scheduled task '$TaskName' will run automatically at your"
-Write-Host "     next logon, or start it now:"
-Write-Host "       Start-ScheduledTask -TaskName $TaskName"
+Write-Host "  1. Pair once from this PowerShell window:"
+Write-Host "       & '$WrapperPath' pair --relay wss://relay.yourdomain.com"
+Write-Host "  2. A no-admin per-user Startup launcher is installed at:"
+Write-Host "       $StartupLauncher"
+Write-Host "     It reconnects automatically at your next login. To start the"
+Write-Host "     background reconnect loop now, after pairing, run:"
+Write-Host "       wscript.exe '$StartupLauncher'"
