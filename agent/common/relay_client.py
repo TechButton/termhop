@@ -110,7 +110,8 @@ class RelayClient:
             raise HandshakeError(f"malformed envelope from relay: {exc}") from exc
         if envelope.v != PROTOCOL_VERSION:
             raise HandshakeError(
-                f"relay protocol version {envelope.v} does not match client version {PROTOCOL_VERSION}"
+                "relay protocol version "
+                f"{envelope.v} does not match client version {PROTOCOL_VERSION}"
             )
         return envelope
 
@@ -356,6 +357,14 @@ class RelayClient:
     async def send_session_close(self, reason: str = "") -> None:
         await self._send(
             "session_close", session_id=self.session_id, payload={"reason": reason}
+        )
+
+    async def send_session_list(self, sessions: list[dict]) -> None:
+        """Publish bounded session metadata after an authenticated connection."""
+        await self._send(
+            "session_list",
+            session_id=self.session_id,
+            payload={"sessions": sessions[:64]},
         )
 
     async def close(self) -> None:

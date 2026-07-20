@@ -7,6 +7,7 @@ import os
 import socket
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 from common import pairing
 from common.config import AgentConfig, load_config, save_config
@@ -15,6 +16,17 @@ from common.ptybackend import PTYBackend
 from common.relay_client import HandshakeError, RelayClient
 from common.session_pump import run_pty_session
 from common.terminal_qr import print_pairing_qr
+from common.session_manager import SessionManager
+
+
+def _session_manifest_path() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        return base / "termhop" / "sessions.json"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "termhop" / "sessions.json"
+    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return base / "termhop" / "sessions.json"
 
 
 async def _run_persistent_session(
@@ -57,6 +69,7 @@ async def pair_and_stream(
     backend_factory: Callable[[], PTYBackend],
     shell_env_var: str,
     default_shell: str,
+    session_label: str,
 ) -> int:
     hostname = socket.gethostname()
     shell_cwd = os.path.expanduser("~")
@@ -72,9 +85,24 @@ async def pair_and_stream(
             print("Saved client reconnected. Starting a new shell after agent restart.")
             backend = backend_factory()
             backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
-            await _run_persistent_session(
-                client, backend, relay_url=relay_url, hostname=hostname, config=config
-            )
+            session_manager = SessionManager(_session_manifest_path())
+            session_record = session_manager.create(session_label, shell_cwd)
+            session_manager.start(session_record.session_id)
+            await client.send_session_list([
+                {
+                    "session_id": item.session_id,
+                    "label": item.label,
+                    "cwd": item.cwd,
+                    "state": item.state,
+                }
+                for item in session_manager.list()
+            ])
+            try:
+                await _run_persistent_session(
+                    client, backend, relay_url=relay_url, hostname=hostname, config=config
+                )
+            finally:
+                session_manager.complete(session_record.session_id)
             return 0
 
         config.device_id = pairing.generate_device_id()
@@ -118,9 +146,24 @@ async def pair_and_stream(
         print("Paired. Starting shell session.")
         backend = backend_factory()
         backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
-        await _run_persistent_session(
-            client, backend, relay_url=relay_url, hostname=hostname, config=config
-        )
+        session_manager = SessionManager(_session_manifest_path())
+        session_record = session_manager.create(session_label, shell_cwd)
+        session_manager.start(session_record.session_id)
+        await client.send_session_list([
+            {
+                "session_id": item.session_id,
+                "label": item.label,
+                "cwd": item.cwd,
+                "state": item.state,
+            }
+            for item in session_manager.list()
+        ])
+        try:
+            await _run_persistent_session(
+                client, backend, relay_url=relay_url, hostname=hostname, config=config
+            )
+        finally:
+            session_manager.complete(session_record.session_id)
         return 0
     finally:
         await client.close()
@@ -149,6 +192,11 @@ def run_cli(
         action="store_true",
         help="rotate the saved device credential and pair a new client",
     )
+    pair_parser.add_argument(
+        "--label",
+        default="Terminal session",
+        help="label for the persistent terminal session",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -175,6 +223,7 @@ def run_cli(
                 backend_factory=backend_factory,
                 shell_env_var=shell_env_var,
                 default_shell=default_shell,
+                session_label=args.label,
             )
         )
     except HandshakeError as exc:

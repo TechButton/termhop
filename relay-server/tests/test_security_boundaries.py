@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 from relay.config import Config
 from relay.envelope import Envelope, EnvelopeInvalid, parse_envelope
 from relay.pairing import validate_token_format
-from relay.router import ConnectionContext, handle_routable
+from relay.router import ConnectionContext, dispatch, handle_routable
 from relay.session_registry import SessionRegistry
 
 
@@ -86,6 +86,27 @@ class RelaySecurityBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         agent.send_text.assert_awaited_once()
         client.send_text.assert_not_awaited()
+
+    async def test_session_list_is_agent_only(self) -> None:
+        client = AsyncMock()
+        ctx = ConnectionContext(
+            ws=client,
+            role="client",
+            peer_ip="127.0.0.1",
+            redis=AsyncMock(),
+            cfg=config(),
+            registry=SessionRegistry(),
+            session_id="sess-test",
+        )
+        envelope = Envelope(
+            v=2, type="session_list", session_id="sess-test", seq=1, ts=1,
+            payload={"sessions": [{"session_id": "sess-test", "label": "forged"}]},
+        )
+
+        await dispatch(ctx, envelope)
+
+        client.send_text.assert_awaited_once()
+        self.assertIn("not valid from the client role", client.send_text.await_args.args[0])
 
     def test_token_and_envelope_inputs_are_strict(self) -> None:
         with self.assertRaises(Exception):

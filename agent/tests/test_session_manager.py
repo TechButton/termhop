@@ -1,4 +1,5 @@
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,28 @@ class SessionManagerTests(unittest.TestCase):
             manager.create("\nnot safe", "/home/tester")
         with self.assertRaises(SessionError):
             manager.create("x" * 97, "/home/tester")
+
+    def test_completion_releases_lease_and_persists_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manager = SessionManager(Path(directory) / "sessions.json")
+            record = manager.create("build", "/home/tester")
+            manager.start(record.session_id)
+            manager.attach(record.session_id)
+            completed = manager.complete(record.session_id, 17)
+            self.assertEqual(completed.state, "exited")
+            self.assertEqual(completed.exit_code, 17)
+            with self.assertRaisesRegex(SessionError, "cannot attach"):
+                manager.attach(record.session_id)
+            restored = SessionManager(Path(directory) / "sessions.json")
+            self.assertEqual(restored.get(record.session_id).exit_code, 17)
+
+    def test_expired_lease_can_be_reclaimed(self) -> None:
+        manager = SessionManager(lease_seconds=30)
+        record = manager.create("shell", "/home/tester")
+        manager.attach(record.session_id)
+        manager._leases[record.session_id].expires_at = time.monotonic() - 1
+        replacement = manager.attach(record.session_id)
+        self.assertIsInstance(replacement, str)
 
 
 if __name__ == "__main__":

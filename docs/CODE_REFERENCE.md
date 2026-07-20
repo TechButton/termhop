@@ -41,6 +41,10 @@ boundary begins. Module headers provide the local implementation details.
   QR matrix using Unicode blocks; the plain URL remains visible as fallback.
 - `common/session_pump.py`: two-way encrypted PTY pump and deterministic task,
   PTY, and WebSocket cleanup.
+- `common/session_manager.py`: owner-only persistent session manifest. It
+  creates bounded labels, tracks `created`/`running`/`detached`/`paused`/
+  `exited`/`terminated` state, and issues a short-lived single-controller
+  lease so a session cannot be controlled concurrently from two browsers.
 - `linux/pty_backend.py`, `macos/pty_backend.py`: asyncio-readable POSIX PTYs.
 - `windows/pty_backend.py`: ConPTY with a daemon read bridge so cancellation
   cannot hang Python executor shutdown.
@@ -60,6 +64,9 @@ boundary begins. Module headers provide the local implementation details.
 4. Only after proof completion does the relay route encrypted terminal data.
 5. Initial pairing transfers a separate durable device secret inside AEAD.
    Later resumes derive fresh ephemeral session keys from that secret.
+6. After authentication, the agent publishes bounded session metadata only
+   (`session_id`, label, working directory, and state). The relay forwards it
+   without reading terminal content; browsers cannot publish `session_list`.
 
 ## Non-goals and intentional power
 

@@ -94,7 +94,9 @@ disabled intentionally.
 Protocol v2 encrypts terminal data between the browser client and agent. The relay receives routing metadata and ciphertext, not terminal plaintext. Authenticated pairing pins the agent's public key before a terminal session starts.
 
 Read [SECURITY.md](SECURITY.md), the [code reference](docs/CODE_REFERENCE.md),
-and the [security audit](docs/SECURITY_AUDIT_2026-07-20.md) before production
+[persistent session lifecycle](docs/SESSION_LIFECYCLE.md), the
+[release checklist](docs/RELEASE_CHECKLIST.md), and the
+[security audit](docs/SECURITY_AUDIT_2026-07-20.md) before production
 deployment.
 
 The relay server and agents are licensed under [AGPL-3.0](LICENSE). The hosted account service and browser client are operated separately and are not part of this repository.

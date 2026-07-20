@@ -88,7 +88,11 @@ class SessionManager:
                 os.fchmod(fd, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 fd = -1
-                json.dump([asdict(item) for item in self._sessions.values()], handle, separators=(",", ":"))
+                json.dump(
+                    [asdict(item) for item in self._sessions.values()],
+                    handle,
+                    separators=(",", ":"),
+                )
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.manifest_path)
@@ -190,6 +194,15 @@ class SessionManager:
         record.state = "terminated"
         record.updated_at = int(time.time())
         del self._leases[session_id]
+        self._save()
+        return record
+
+    def complete(self, session_id: str, exit_code: int | None = None) -> SessionRecord:
+        record = self.get(session_id)
+        record.state = "exited"
+        record.exit_code = exit_code
+        record.updated_at = int(time.time())
+        self._leases.pop(session_id, None)
         self._save()
         return record
 
