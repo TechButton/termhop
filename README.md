@@ -1,0 +1,74 @@
+# termhop
+
+termhop gives you an end-to-end encrypted terminal in a phone or desktop browser. The agent runs on your computer, the relay moves encrypted messages between devices, and terminal contents stay unreadable to the relay.
+
+## Try the disposable demo
+
+Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The environment is wiped when you log out or the demo expires.
+
+## What you need
+
+For the hosted demo, only a current browser is required.
+
+To connect your own computer, you need:
+
+- Python 3.11 or newer and Git
+- Linux, macOS, or Windows 10/11
+- A modern browser with JavaScript enabled
+- A `wss://` relay URL reachable by both devices
+
+To run your own relay, you also need Docker with Docker Compose and a TLS reverse proxy or load balancer. The included Compose service listens on `127.0.0.1:8080`; expose it through HTTPS/WSS rather than publishing that port directly to the internet.
+
+## Install the agent
+
+Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/TechButton/termhop/main/agent/linux/install.sh | sh
+```
+
+macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/TechButton/termhop/main/agent/macos/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/TechButton/termhop/main/agent/windows/install.ps1 | iex
+```
+
+Pair the installed agent with your relay:
+
+```sh
+termhop-agent pair --relay wss://relay.example.com
+```
+
+The command produces an authenticated pairing link. Open [client.42oclock.com](https://client.42oclock.com), then scan its QR code or paste the URL. Pairing secrets are short-lived and are sent out of band from the relay connection.
+
+## Run a relay
+
+```sh
+git clone https://github.com/TechButton/termhop.git
+cd termhop
+cp .env.example .env
+docker compose up -d --build
+curl http://127.0.0.1:8080/healthz
+```
+
+Before starting, set `DOMAIN` in `.env` to the public relay hostname. Configure your reverse proxy to terminate TLS and proxy WebSocket traffic to `127.0.0.1:8080`. Redis data is stored in the `redis-data` Docker volume.
+
+## Repository layout
+
+- `relay-server/` — FastAPI WebSocket relay and routing-token service
+- `agent/common/` — shared protocol, encryption, pairing, and session code
+- `agent/linux/` — Linux PTY agent and systemd user service
+- `agent/macos/` — macOS PTY agent and launchd configuration
+- `agent/windows/` — Windows ConPTY agent and scheduled-task installer
+
+## Security and scope
+
+Protocol v2 encrypts terminal data between the browser client and agent. The relay receives routing metadata and ciphertext, not terminal plaintext. Authenticated pairing pins the agent's public key before a terminal session starts.
+
+The relay server and agents are licensed under [AGPL-3.0](LICENSE). The hosted account service and browser client are operated separately and are not part of this repository.
