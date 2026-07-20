@@ -145,8 +145,11 @@ accounts.
 After the first terminal session ends, start the hidden reconnect loop now:
 
 ```powershell
-wscript.exe "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\TermhopAgent.vbs"
+& "$env:SystemRoot\System32\wscript.exe" "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\TermhopAgent.vbs"
 ```
+
+Keep the double quotes around both paths. Do not use literal single quotes if
+launching the command from Command Prompt rather than PowerShell.
 
 It will also start automatically at future logins. To confirm it is running:
 
