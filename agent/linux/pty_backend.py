@@ -12,8 +12,13 @@ class PtyLinuxBackend(PTYBackend):
     def __init__(self) -> None:
         self._proc: ptyprocess.PtyProcess | None = None
 
-    def spawn(self, command: list[str], cwd: str | None = None) -> None:
-        self._proc = ptyprocess.PtyProcess.spawn(command, cwd=cwd)
+    def spawn(
+        self,
+        command: list[str],
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        self._proc = ptyprocess.PtyProcess.spawn(command, cwd=cwd, env=env)
 
     async def read(self, max_bytes: int = 65536) -> bytes:
         proc = self._proc

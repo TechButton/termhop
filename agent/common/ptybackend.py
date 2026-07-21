@@ -7,8 +7,15 @@ from abc import ABC, abstractmethod
 
 class PTYBackend(ABC):
     @abstractmethod
-    def spawn(self, command: list[str], cwd: str | None = None) -> None:
-        """Start the child process attached to a new PTY."""
+    def spawn(
+        self,
+        command: list[str],
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        """Start the child process attached to a new PTY. `env`, when given,
+        replaces the inherited environment entirely (callers should merge
+        with the current environment themselves if they want to keep it)."""
 
     @abstractmethod
     async def read(self, max_bytes: int = 65536) -> bytes:

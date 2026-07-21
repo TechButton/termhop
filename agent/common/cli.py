@@ -19,6 +19,36 @@ from common.terminal_qr import print_pairing_qr
 from common.session_manager import SessionManager
 
 
+def _shell_environment() -> dict[str, str]:
+    """Environment for the spawned shell: the agent's own environment, with
+    TERM, COLORTERM, and a UTF-8 locale filled in if missing.
+
+    Service managers (systemd --user without a login session, launchd) often
+    start the agent with none of these set at all, which starves the shell of
+    a real terminfo entry and leaves it in the C/POSIX locale — multi-byte
+    UTF-8 (box-drawing, emoji, other wide characters) then renders as
+    mojibake or '?', and prompts/tools (git, ls, shell themes) that gate
+    colored output on TERM/COLORTERM fall back to plain text instead of the
+    same colors and formatting a real console or SSH session would show.
+    Existing values are never overridden, so an operator's real configuration
+    wins.
+    """
+    env = dict(os.environ)
+    env.setdefault("TERM", "xterm-256color")
+    # Many CLI tools (git, ls --color, ripgrep, bat, shell prompt themes)
+    # check COLORTERM to decide whether to emit 24-bit color, not just TERM.
+    env.setdefault("COLORTERM", "truecolor")
+    if sys.platform == "darwin":
+        # macOS doesn't ship glibc's "C.UTF-8"; en_US.UTF-8 is preinstalled
+        # by the OS itself and always available.
+        env.setdefault("LANG", "en_US.UTF-8")
+        env.setdefault("LC_ALL", "en_US.UTF-8")
+    elif sys.platform != "win32":
+        env.setdefault("LANG", "C.UTF-8")
+        env.setdefault("LC_ALL", "C.UTF-8")
+    return env
+
+
 def _session_manifest_path() -> Path:
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
@@ -73,6 +103,7 @@ async def pair_and_stream(
 ) -> int:
     hostname = socket.gethostname()
     shell_cwd = os.path.expanduser("~")
+    shell_env = _shell_environment()
     client = RelayClient(relay_url, agent_hostname=hostname)
     try:
         await client.connect()
@@ -84,7 +115,11 @@ async def pair_and_stream(
             await client.await_resume_and_complete()
             print("Saved client reconnected. Starting a new shell after agent restart.")
             backend = backend_factory()
-            backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
+            backend.spawn(
+                [os.environ.get(shell_env_var, default_shell)],
+                cwd=shell_cwd,
+                env=shell_env,
+            )
             session_manager = SessionManager(_session_manifest_path())
             session_record = session_manager.create(session_label, shell_cwd)
             session_manager.start(session_record.session_id)
@@ -145,7 +180,11 @@ async def pair_and_stream(
         save_config(config)
         print("Paired. Starting shell session.")
         backend = backend_factory()
-        backend.spawn([os.environ.get(shell_env_var, default_shell)], cwd=shell_cwd)
+        backend.spawn(
+            [os.environ.get(shell_env_var, default_shell)],
+            cwd=shell_cwd,
+            env=shell_env,
+        )
         session_manager = SessionManager(_session_manifest_path())
         session_record = session_manager.create(session_label, shell_cwd)
         session_manager.start(session_record.session_id)
