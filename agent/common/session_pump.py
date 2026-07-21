@@ -35,7 +35,14 @@ async def _pump_relay_to_pty(client: RelayClient, backend: PTYBackend) -> None:
         elif envelope.type == "session_resize":
             rows = envelope.payload.get("rows")
             cols = envelope.payload.get("cols")
-            if rows and cols:
+            if (
+                isinstance(rows, int)
+                and isinstance(cols, int)
+                and not isinstance(rows, bool)
+                and not isinstance(cols, bool)
+                and 1 <= rows <= 9999
+                and 1 <= cols <= 9999
+            ):
                 backend.resize(rows, cols)
         elif envelope.type == "session_close":
             _logger.info("session_close received from peer")

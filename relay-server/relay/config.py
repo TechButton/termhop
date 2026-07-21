@@ -34,6 +34,8 @@ class Config:
     handshake_timeout_s: int
     client_origins: tuple[str, ...]
     release: str
+    trusted_proxy_ips: frozenset[str]
+    max_connections_per_ip: int
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -43,16 +45,28 @@ class Config:
         protocol_version = _env_int("PROTOCOL_VERSION", PROTOCOL_VERSION)
         if protocol_version != PROTOCOL_VERSION:
             raise ValueError(f"only protocol version {PROTOCOL_VERSION} is supported")
+        # No hardcoded fallback: every operator must consciously choose the
+        # origins their relay trusts, rather than silently inheriting the
+        # upstream project's own hosted client domains.
         origins = tuple(
             origin.strip().rstrip("/")
-            for origin in os.environ.get(
-                "CLIENT_ORIGINS",
-                "https://client.42oclock.com,https://app.42oclock.com",
-            ).split(",")
+            for origin in os.environ.get("CLIENT_ORIGINS", "").split(",")
             if origin.strip()
         )
         if not origins or any(urlsplit(origin).scheme != "https" for origin in origins):
-            raise ValueError("CLIENT_ORIGINS must contain one or more HTTPS origins")
+            raise ValueError(
+                "CLIENT_ORIGINS must be set to one or more HTTPS origins "
+                "(comma-separated) — no default is provided"
+            )
+        # Empty by default: until an operator explicitly names the reverse
+        # proxy's address, X-Forwarded-For is never trusted and rate limiting
+        # keys on the raw peer address. Trusting it unconditionally would let
+        # any client spoof the header and bypass per-IP throttling outright.
+        trusted_proxy_ips = frozenset(
+            entry.strip()
+            for entry in os.environ.get("TRUSTED_PROXY_IPS", "").split(",")
+            if entry.strip()
+        )
         return cls(
             domain=os.environ.get("DOMAIN", "relay.example.com"),
             redis_url=redis_url,
@@ -72,4 +86,8 @@ class Config:
             handshake_timeout_s=_bounded_int("HANDSHAKE_TIMEOUT_S", 20, 5, 120),
             client_origins=origins,
             release=os.environ.get("TERMHOP_RELEASE", "development"),
+            trusted_proxy_ips=trusted_proxy_ips,
+            max_connections_per_ip=_bounded_int(
+                "MAX_CONNECTIONS_PER_IP", 40, 1, 10000
+            ),
         )

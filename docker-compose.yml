@@ -8,9 +8,11 @@ services:
       - REDIS_URL=${REDIS_URL}
       - PAIRING_TOKEN_TTL=${PAIRING_TOKEN_TTL}
       - PROTOCOL_VERSION=${PROTOCOL_VERSION:-2}
-      - CLIENT_ORIGINS=${CLIENT_ORIGINS:-https://client.42oclock.com,https://app.42oclock.com}
+      - CLIENT_ORIGINS=${CLIENT_ORIGINS}
       - HANDSHAKE_TIMEOUT_S=${HANDSHAKE_TIMEOUT_S:-20}
       - TERMHOP_RELEASE=${TERMHOP_RELEASE:-development}
+      - TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-}
+      - MAX_CONNECTIONS_PER_IP=${MAX_CONNECTIONS_PER_IP:-40}
     depends_on:
       redis:
         condition: service_healthy

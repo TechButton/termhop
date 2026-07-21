@@ -76,3 +76,30 @@ async def check_token_rate_limit(redis: Redis, cfg: Config, token: str) -> None:
     )
     if result[0] == "blocked":
         raise RateLimited(retry_after_s=None)
+
+
+class ConnectionLimiter:
+    """In-process cap on concurrent WebSocket connections per (post-proxy) IP.
+
+    Independent of the Redis-backed limiters above, which only guard pairing
+    protocol messages: this bounds how many sockets one address can hold
+    open before ever sending a message, so a connect-and-go-silent flood
+    can't exhaust file descriptors/memory on its own.
+    """
+
+    def __init__(self) -> None:
+        self._counts: dict[str, int] = {}
+
+    def try_acquire(self, ip: str, max_per_ip: int) -> bool:
+        count = self._counts.get(ip, 0)
+        if count >= max_per_ip:
+            return False
+        self._counts[ip] = count + 1
+        return True
+
+    def release(self, ip: str) -> None:
+        count = self._counts.get(ip, 0)
+        if count <= 1:
+            self._counts.pop(ip, None)
+        else:
+            self._counts[ip] = count - 1

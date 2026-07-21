@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Dependency CVEs are disclosed after the fact, so re-audit pins
+    # regularly even when nothing in the repo has changed.
+    - cron: "0 6 * * 1"
+
+jobs:
+  agent-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install agent dependencies
+        run: pip install -r agent/requirements-linux.txt
+      - name: Run agent test suite
+        working-directory: agent
+        run: python -m unittest discover -s tests -v
+
+  relay-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install relay dependencies
+        run: pip install -r relay-server/requirements.txt
+      - name: Run relay test suite
+        working-directory: relay-server
+        run: python -m unittest discover -s tests -v
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit agent dependencies (Linux)
+        run: pip-audit -r agent/requirements-linux.txt
+      - name: Audit agent dependencies (macOS)
+        run: pip-audit -r agent/requirements-macos.txt
+      - name: Audit agent dependencies (Windows)
+        run: pip-audit -r agent/requirements-windows.txt
+      - name: Audit relay dependencies
+        run: pip-audit -r relay-server/requirements.txt

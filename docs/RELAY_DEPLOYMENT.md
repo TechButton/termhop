@@ -63,9 +63,11 @@ DOMAIN=relay.example.com
 REDIS_URL=redis://127.0.0.1:6379/0
 PAIRING_TOKEN_TTL=120
 PROTOCOL_VERSION=2
-CLIENT_ORIGINS=https://client.42oclock.com,https://app.42oclock.com
+CLIENT_ORIGINS=https://your-client-domain.example
 HANDSHAKE_TIMEOUT_S=20
 TERMHOP_RELEASE=native
+TRUSTED_PROXY_IPS=
+MAX_CONNECTIONS_PER_IP=40
 ```
 
 Then enable the service and configure the same TLS proxy shown above:
@@ -110,8 +112,22 @@ and Redis's [memory guidance](https://redis.io/docs/latest/operate/oss_and_stack
 - Allow inbound 22 only from management addresses and inbound 443 publicly.
 - Keep relay port 8080 and Redis 6379 bound to loopback/private networks.
 - Configure TLS renewal and alert before certificate expiry.
-- Trust forwarded client IP headers only from the local reverse proxy.
+- Set `TRUSTED_PROXY_IPS` to the exact address(es) your TLS proxy connects
+  from, as seen by the relay process — never leave it unset while running
+  behind a proxy. Left empty (the default), the relay ignores
+  `X-Forwarded-For` entirely and rate-limits on the raw peer address, which
+  in the Docker Compose topology is the container network's bridge gateway
+  for every proxied connection, not the real client — this collapses per-IP
+  pairing rate limits down to one shared bucket for all users. Find the
+  correct value with `docker network inspect <project>_default` (look for
+  the bridge `Gateway`), or run the proxy in the same custom Docker network
+  as the relay and pin its container IP instead of relying on the gateway.
+  Verify it by comparing `peer_ip` in relay logs against real distinct
+  client addresses before relying on rate limiting in production.
+- Leave `MAX_CONNECTIONS_PER_IP` (default 40) in place; it bounds concurrent
+  sockets from one address regardless of whether they ever send a message.
 - Monitor `/healthz`, container/service restarts, Redis errors, rate limits,
   open WebSockets, memory, CPU, disk, and network transfer.
-- Rebuild images and rerun `pip-audit` after dependency changes.
+- Rebuild images and rerun `pip-audit` after dependency changes — CI also
+  runs `pip-audit` against every requirements file on a weekly schedule.
 - Back up configuration, not transient Redis pairing/session data.

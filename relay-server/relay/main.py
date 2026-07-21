@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from relay.config import Config
+from relay.ratelimit import ConnectionLimiter
 from relay.redis_client import make_redis
 from relay.session_registry import SessionRegistry
 from relay.ws_handlers import router as ws_router
@@ -16,6 +17,7 @@ async def lifespan(app: FastAPI):
     app.state.config = cfg
     app.state.redis = make_redis(cfg.redis_url)
     app.state.registry = SessionRegistry()
+    app.state.conn_limiter = ConnectionLimiter()
     try:
         yield
     finally:

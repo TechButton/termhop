@@ -19,35 +19,62 @@ router = APIRouter()
 _POLICY_VIOLATION = 1008
 
 
-def _client_ip(websocket: WebSocket) -> str:
+def _client_ip(websocket: WebSocket, trusted_proxy_ips: frozenset[str]) -> str:
+    # Only trust X-Forwarded-For when the directly-connecting peer is a
+    # known reverse proxy; otherwise any client could spoof the header and
+    # bypass per-IP rate limiting / connection caps outright. When trusted,
+    # take the last hop, i.e. the address the (single, immediate) proxy
+    # itself reports as whoever connected to it.
     client = websocket.client
-    return client.host if client else "unknown"
+    peer = client.host if client else "unknown"
+    if peer in trusted_proxy_ips:
+        forwarded = websocket.headers.get("x-forwarded-for")
+        if forwarded:
+            candidate = forwarded.rsplit(",", 1)[-1].strip()
+            if candidate:
+                return candidate
+    return peer
 
 
 async def _ws_loop(websocket: WebSocket, role: Role) -> None:
+    cfg = websocket.app.state.config
     if role == "client":
         origin = websocket.headers.get("origin")
-        allowed = websocket.app.state.config.client_origins
-        if origin is not None and origin.rstrip("/") not in allowed:
+        if origin is not None and origin.rstrip("/") not in cfg.client_origins:
             await websocket.close(code=_POLICY_VIOLATION, reason="origin not allowed")
             return
-    await websocket.accept()
+    peer_ip = _client_ip(websocket, cfg.trusted_proxy_ips)
+    limiter = websocket.app.state.conn_limiter
+    if not limiter.try_acquire(peer_ip, cfg.max_connections_per_ip):
+        await websocket.close(
+            code=_POLICY_VIOLATION, reason="too many connections from this address"
+        )
+        return
     app = websocket.app
     ctx = ConnectionContext(
         ws=websocket,
         role=role,
-        peer_ip=_client_ip(websocket),
+        peer_ip=peer_ip,
         redis=app.state.redis,
-        cfg=app.state.config,
+        cfg=cfg,
         registry=app.state.registry,
     )
     try:
+        await websocket.accept()
         while True:
-            timeout = None
-            if ctx.session_id is not None and ctx.handshake_deadline is not None:
+            # Every connection carries a deadline by default — including
+            # before session_id is even bound, so a connection that never
+            # sends a first message at all can't be held open indefinitely.
+            # Two phases are deliberately exempt: "established" (the session
+            # is live) and "waiting_resume" (an agent legitimately waits
+            # unbounded for its owner to resume, see SESSION_LIFECYCLE.md).
+            if ctx.handshake_deadline is None:
+                ctx.handshake_deadline = time.monotonic() + ctx.cfg.handshake_timeout_s
+            timeout = max(ctx.handshake_deadline - time.monotonic(), 0.0)
+            if ctx.session_id is not None:
                 slot = ctx.registry.get(ctx.session_id)
-                if slot is not None and slot.phase != "established":
-                    timeout = max(ctx.handshake_deadline - time.monotonic(), 0)
+                if slot is not None and slot.phase in ("established", "waiting_resume"):
+                    timeout = None
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=timeout)
             except TimeoutError:
@@ -77,6 +104,7 @@ async def _ws_loop(websocket: WebSocket, role: Role) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        limiter.release(peer_ip)
         await _handle_disconnect(ctx)
 
 

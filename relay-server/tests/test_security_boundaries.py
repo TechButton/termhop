@@ -2,13 +2,15 @@
 
 import base64
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from relay.config import Config
 from relay.envelope import Envelope, EnvelopeInvalid, parse_envelope
 from relay.pairing import validate_token_format
+from relay.ratelimit import ConnectionLimiter
 from relay.router import ConnectionContext, dispatch, handle_routable
 from relay.session_registry import SessionRegistry
+from relay.ws_handlers import _client_ip
 
 
 def config() -> Config:
@@ -27,6 +29,8 @@ def config() -> Config:
         handshake_timeout_s=20,
         client_origins=("https://client.example.com",),
         release="test",
+        trusted_proxy_ips=frozenset(),
+        max_connections_per_ip=40,
     )
 
 
@@ -117,6 +121,58 @@ class RelaySecurityBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 max_bytes=262144,
                 expected_version=2,
             )
+
+
+def _fake_websocket(peer_host: str, headers: dict[str, str]) -> Mock:
+    ws = Mock()
+    ws.client = Mock(host=peer_host)
+    ws.headers = headers
+    return ws
+
+
+class ClientIpTests(unittest.TestCase):
+    def test_untrusted_peer_cannot_spoof_forwarded_header(self) -> None:
+        ws = _fake_websocket("203.0.113.9", {"x-forwarded-for": "10.0.0.1"})
+        self.assertEqual(_client_ip(ws, frozenset()), "203.0.113.9")
+
+    def test_trusted_proxy_forwarded_header_is_used(self) -> None:
+        ws = _fake_websocket("172.18.0.1", {"x-forwarded-for": "203.0.113.9"})
+        self.assertEqual(
+            _client_ip(ws, frozenset({"172.18.0.1"})), "203.0.113.9"
+        )
+
+    def test_trusted_proxy_takes_last_hop_of_chain(self) -> None:
+        ws = _fake_websocket(
+            "172.18.0.1", {"x-forwarded-for": "10.0.0.5, 203.0.113.9"}
+        )
+        self.assertEqual(
+            _client_ip(ws, frozenset({"172.18.0.1"})), "203.0.113.9"
+        )
+
+    def test_trusted_proxy_without_header_falls_back_to_peer(self) -> None:
+        ws = _fake_websocket("172.18.0.1", {})
+        self.assertEqual(_client_ip(ws, frozenset({"172.18.0.1"})), "172.18.0.1")
+
+
+class ConnectionLimiterTests(unittest.TestCase):
+    def test_blocks_once_per_ip_cap_is_reached(self) -> None:
+        limiter = ConnectionLimiter()
+        for _ in range(3):
+            self.assertTrue(limiter.try_acquire("1.2.3.4", 3))
+        self.assertFalse(limiter.try_acquire("1.2.3.4", 3))
+
+    def test_other_ips_are_unaffected(self) -> None:
+        limiter = ConnectionLimiter()
+        for _ in range(3):
+            limiter.try_acquire("1.2.3.4", 3)
+        self.assertTrue(limiter.try_acquire("5.6.7.8", 3))
+
+    def test_release_frees_a_slot(self) -> None:
+        limiter = ConnectionLimiter()
+        for _ in range(3):
+            limiter.try_acquire("1.2.3.4", 3)
+        limiter.release("1.2.3.4")
+        self.assertTrue(limiter.try_acquire("1.2.3.4", 3))
 
 
 if __name__ == "__main__":

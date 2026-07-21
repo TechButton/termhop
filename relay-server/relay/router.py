@@ -201,6 +201,11 @@ async def handle_pair_init(ctx: ConnectionContext, envelope: Envelope) -> None:
         ctx.registry.detach(session_id, "agent")
         ctx.session_id = None
         raise
+    # Bound the agent's "waiting to be scanned" connection to the token's own
+    # lifetime, not the shorter interactive handshake_timeout_s — once the
+    # token expires no client can consume it anyway, but until then the QR
+    # code the agent displayed is still genuinely valid.
+    ctx.handshake_deadline = time.monotonic() + ctx.cfg.pairing_token_ttl_s
     log_event(
         "pair_init", session_id=session_id, msg_type="pair_init", peer_ip=ctx.peer_ip
     )
@@ -389,6 +394,10 @@ async def handle_resume_init(ctx: ConnectionContext, envelope: Envelope) -> None
         )
         return
     ctx.session_id = session_id
+    # No handshake_deadline here: a resumed agent legitimately waits
+    # unbounded in "waiting_resume" for its owner to reconnect, possibly far
+    # longer than a single pairing window (see docs/SESSION_LIFECYCLE.md).
+    # The ws loop exempts this phase from its idle deadline explicitly.
     await send_envelope(
         ctx.ws,
         _envelope(
