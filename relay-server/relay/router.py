@@ -497,6 +497,13 @@ async def handle_resume_challenge(ctx: ConnectionContext, envelope: Envelope) ->
     if peer is None:
         await _send_error(ctx, "session_not_found", "client disconnected")
         return
+    # The agent's ctx.handshake_deadline is still whatever it was when this
+    # connection first opened, possibly long ago — "waiting_resume" is exempt
+    # from it, but the slot just left that phase (see handle_resume_request),
+    # so the ws loop will start enforcing that stale deadline on the very
+    # next receive. Refresh it here, mirroring the client-side reset in
+    # handle_resume_request, so the agent gets a fresh window to finish.
+    ctx.handshake_deadline = time.monotonic() + ctx.cfg.handshake_timeout_s
     await send_envelope(peer, envelope)
 
 

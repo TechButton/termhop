@@ -1,6 +1,7 @@
 """Relay protocol state and input-validation security tests."""
 
 import base64
+import time
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -8,7 +9,7 @@ from relay.config import Config
 from relay.envelope import Envelope, EnvelopeInvalid, parse_envelope
 from relay.pairing import validate_token_format
 from relay.ratelimit import ConnectionLimiter
-from relay.router import ConnectionContext, dispatch, handle_routable
+from relay.router import ConnectionContext, dispatch, handle_resume_challenge, handle_routable
 from relay.session_registry import SessionRegistry
 from relay.ws_handlers import _client_ip
 
@@ -152,6 +153,54 @@ class ClientIpTests(unittest.TestCase):
     def test_trusted_proxy_without_header_falls_back_to_peer(self) -> None:
         ws = _fake_websocket("172.18.0.1", {})
         self.assertEqual(_client_ip(ws, frozenset({"172.18.0.1"})), "172.18.0.1")
+
+
+class ResumeHandshakeDeadlineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resume_challenge_refreshes_the_agents_stale_connect_time_deadline(
+        self,
+    ) -> None:
+        # A resumed agent can legitimately sit in "waiting_resume" for far
+        # longer than handshake_timeout_s (that phase is exempt from the
+        # deadline in ws_handlers._ws_loop). But its ctx.handshake_deadline
+        # is still the stale value from when it first connected, minutes or
+        # hours ago. Once a client shows up and the slot phase flips to
+        # "resuming" (no longer exempt), the ws_loop re-applies that ancient
+        # deadline on its very next receive_text() and instantly times out —
+        # closing the agent's socket and sending the client a session_close
+        # instead of the resume_complete it's waiting for. The agent side of
+        # the handshake (handle_resume_challenge) must refresh the deadline,
+        # the same way handle_resume_request already does for the client
+        # side, so the agent gets a fresh window to finish the handshake.
+        agent = AsyncMock()
+        client = AsyncMock()
+        registry = SessionRegistry()
+        slot = registry.attach("sess-test", "agent", agent)
+        registry.attach("sess-test", "client", client)
+        slot.phase = "resuming"
+        stale_deadline = time.monotonic() - 3600
+        ctx = ConnectionContext(
+            ws=agent,
+            role="agent",
+            peer_ip="127.0.0.1",
+            redis=AsyncMock(),
+            cfg=config(),
+            registry=registry,
+            session_id="sess-test",
+            handshake_deadline=stale_deadline,
+        )
+        envelope = Envelope(
+            v=2,
+            type="resume_challenge",
+            session_id="sess-test",
+            seq=1,
+            ts=1,
+            payload={"agent_pubkey": base64.b64encode(b"x" * 32).decode()},
+        )
+
+        await handle_resume_challenge(ctx, envelope)
+
+        client.send_text.assert_awaited_once()
+        self.assertGreater(ctx.handshake_deadline, time.monotonic())
 
 
 class ConnectionLimiterTests(unittest.TestCase):
