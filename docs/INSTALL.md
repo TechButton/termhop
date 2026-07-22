@@ -232,6 +232,53 @@ updating.
   inspect its logs/status using the commands above.
 - **Pairing fails after reusing an old link:** run the pairing command again; the
   previous token may have expired or already been consumed.
+- **`Pairing failed: expected resume_init_ack, got error`:** the relay only
+  allows one live connection per device at a time. This means the background
+  agent (systemd user service / LaunchAgent / Windows startup task) is
+  already running and holding that connection — running `termhop-agent pair`
+  again in a separate terminal collides with it. Check first:
+
+  ```sh
+  systemctl --user status termhop-agent   # Linux
+  launchctl list io.termhop.agent         # macOS
+  ```
+
+  If it's active, don't run `pair` manually — it's already reconnecting on
+  its own. If it looks stuck, restart the service instead of running a second
+  copy: `systemctl --user restart termhop-agent` (Linux) or the equivalent
+  `launchctl kickstart` on macOS.
+
+## Reset a device or move it to a different account
+
+Every paired device has one durable credential, generated at pairing time and
+saved to `~/.config/termhop/config.toml` (Linux/macOS) or the Windows
+equivalent under `%APPDATA%`. As long as that credential exists, the agent
+will only ever try to *resume* the account it was originally paired to — it
+never re-pairs on its own, even after a restart.
+
+To retire that credential and pair fresh (to the same account or a different
+one), stop the background service first so it isn't also holding the old
+connection, then run the pairing command with `--new-pairing`:
+
+```sh
+systemctl --user stop termhop-agent   # Linux; use the macOS/Windows equivalent from "Remove" below
+termhop-agent pair --relay wss://relay.example.com --new-pairing
+```
+
+`--new-pairing` discards the saved `device_id`/secret and generates a brand
+new one — the old device_id is now permanently orphaned (it never routes to
+any working client again, since nothing remembers its secret) and can be
+removed from the dashboard's attached-computers list. Scan the fresh QR code
+or paste the fresh link from **whichever account's browser** you want this
+computer linked to. Once paired, restart the background service so it starts
+using the new saved credential automatically on boot:
+
+```sh
+systemctl --user start termhop-agent
+```
+
+If you don't want the agent on this machine anymore at all, see **Remove**
+below instead of just clearing the credential.
 
 ## Remove
 
