@@ -4,7 +4,7 @@ termhop gives you an end-to-end encrypted terminal in a phone or desktop browser
 
 ## Try the disposable demo
 
-Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The 10-minute allowlist includes Snake, 2048, original ANSI space and Matrix animations, a relay showcase, and restricted Codex and Claude launchers. The environment is destroyed when you log out or time expires.
+Visit **[app.42oclock.com](https://app.42oclock.com/demo)** and choose **Start disposable demo**. It boots an isolated Linux environment and connects the browser automatically—there is nothing to install or pair. The 10-minute allowlist includes Snake, 2048, Tetris, original ANSI space, Matrix, and fireworks animations, Conway's Game of Life, a typing speed test, a relay showcase, and restricted Codex and Claude launchers. The environment is destroyed when you log out or time expires.
 
 ## What you need
 
